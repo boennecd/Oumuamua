@@ -1,0 +1,400 @@
+---
+title: "Implementation Details"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Implementation details}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+bibliography: vig-bif.bib
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, error = FALSE,
+  comment = "#R"
+)
+```
+
+This is a short document describing implementation details. 
+Function definitions are shown at the end. The functions are not efficient 
+but show the idea. There are a few things we need to 
+run MARS as suggested by @friedman91 fast. One needs to update a Cholesky 
+decomposition. A Cholesky decomposition can be computed with a block 
+algorithm which is easy to use for updating, see @GoluVanl13 or 
+[wiki](https://en.wikipedia.org/wiki/Cholesky_decomposition#Adding_and_Removing_Rows_and_Columns). 
+The `chol_add` shows a very simple implementation.
+
+```{r def_funcs, echo = FALSE}
+.temp_env <- new.env(baseenv())
+
+# Update Cholesky decompostion A = CC^T to the Cholesky decompostion of
+#  | A      X_1 |
+#  | X_1^T  X_2 |
+# 
+# Args:
+#   C: p-by-p upper triangular Cholesky which should be updated to include 
+#      additional rows and columns. 
+#   A_new: n-by-q matrix which the additional containing | X_1^T X_2^T |^T  
+#
+# Return:
+#   Updated Cholesky decompostion
+# 
+# Complexity of operations are
+#   O(p^2q) for the backward substitution
+#   O(q^2) for the cross product and Cholesky decomposition
+chol_add <- function(C, A_new){
+  n <- NROW(A_new)
+  q <- NCOL(A_new)
+  p <- NCOL(C)
+  stopifnot(n > p, NROW(C) == p, n > q)
+  if(!is.matrix(A_new))
+    A_new <- as.matrix(A_new)
+  
+  out <- matrix(0., n, n)
+  ix <- 1:p
+  out[ ix,  ix] <- C
+  out[ ix, -ix] <- backsolve(C, A_new[ix, ], transpose = TRUE)
+  tmp <- A_new[-ix, ] - crossprod(out[ ix, -ix])
+   out[-ix, -ix] <- if(NCOL(tmp) == 1L) sqrt(tmp) else chol(tmp)
+  out
+}
+environment(chol_add) <- .temp_env
+
+# Solve Ax=b with A=C^TC where C is the Cholesky decomposition
+chol_solve <- function(C, b)
+  backsolve(C, forwardsolve(C, b, transpose = TRUE, upper.tri = TRUE))
+environment(chol_solve) <- .temp_env
+
+# Returns the hinge function times the parent node value and covariate times
+# the parent node value. 
+# 
+# Args:
+#   x: new covariate.
+#   parent: values of parent node. 
+#   knot: knot position. 
+get_basis <- function(x, parent = 1, knot = NULL){
+  stopifnot(length(parent) %in% c(1L, length(x)))
+  if(length(parent) == 1L)
+    parent <- rep(parent, length(x))
+  if(is.null(knot))
+    knot <- sort(x, decreasing = TRUE)[2]
+  
+  x1 <- parent * x
+  x2 <- structure(
+    parent * pmax(x - knot, 0), parent = parent, knot = knot, org = x, 
+    org_parent_cen = x1 - mean(x1))
+  
+  data.frame(x = x1, xk = x2)
+}
+environment(get_basis) <- .temp_env
+
+# Updates quantities in normal equation as in Friedman (1991). 
+# 
+# Args:
+#   x: hinge function from get_basis.
+#   knot_new: new knot position. 
+#   z_old: old right-hand-side in normal equation. 
+#   C_old: old Cholesky decomposition used to solve normal normal equation. 
+#   Bmat_cen: centered design matrix from previous iterations. 
+#   y_cen: centered observed outcomes. 
+#   V_old: old matrix on left-hand-side of normal equation. 
+#   first_call: logical if it is the first call. 
+update_normal_equation <- function(
+  x, knot_new, z_old, C_old, Bmat_cen, y_cen, V_old, first_call){
+  # get the input we need
+  knot_old <- attr(x, "knot")
+  stopifnot(first_call || knot_new < knot_old)
+  out <- x
+  if(!first_call)
+    attr(out, "knot") <- knot_new
+  else 
+    knot_new <- knot_old
+  idx_new <- NCOL(Bmat_cen) + 2L
+  idx_old <- seq_len(idx_new - 2L)
+  org <- attr(out, "org")
+  org_parent_cen <- attr(out, "org_parent_cen")
+  parent <- attr(out, "parent")
+  
+  # find elements that needs to updated
+  if(!first_call){
+    new_active <- org <  knot_old & org >= knot_new
+    active     <- org >= knot_old
+  } else {
+    new_active <- org >= knot_old
+    active     <- rep(FALSE, NROW(Bmat_cen))
+  }
+  all.         <- active | new_active
+  
+  # make update X^T y
+  z_old[idx_new] <- z_old[idx_new] + 
+    sum(
+      y_cen[new_active] * parent[new_active] * (org[new_active] - knot_new)) + 
+    (knot_old - knot_new) * sum(y_cen[active] * parent[active])
+  
+  # make update of cross product of design matrix
+  Vc_new <- V_old[, idx_new]
+  if(NCOL(Bmat_cen) > 0L){
+    Vc_new[idx_old] <- Vc_new[idx_old] + 
+      colSums(
+        Bmat_cen[new_active, idx_old, drop = FALSE] * parent[new_active] * (
+          org[new_active] - knot_new)) + 
+      (knot_old - knot_new) * colSums(
+        Bmat_cen[active, idx_old, drop = FALSE] * parent[active])
+  }
+  # update the part with the linear term
+  idx_lin <- idx_new - 1L
+  Vc_new[idx_lin] <- Vc_new[idx_lin] + 
+      sum(
+        org_parent_cen[new_active] * parent[new_active] * (
+          org[new_active] - knot_new)) + 
+      (knot_old - knot_new) * sum(
+        org_parent_cen[active] * parent[active])
+  
+  # update diagonal entry
+  Vc_new[idx_new] <-  Vc_new[idx_new] + 
+    sum((parent[new_active] * (org[new_active] - knot_new))^2) + 
+    (knot_old - knot_new) * sum(parent[active]^2 * (
+      2 * org[active] - knot_old - knot_new)) + 
+    (sum(parent[active] * (org[active] - knot_old))^2 - 
+       sum(parent[all.] * (org[all.] - knot_new))^2) / NROW(Bmat_cen)
+  
+  # insert new values
+  V_old[idx_new, ] <- V_old[, idx_new] <- Vc_new
+  
+  # update Cholesky decomposition
+  C_old <- chol_add(C_old[-idx_new, -idx_new, drop = FALSE], Vc_new)
+    
+  list(z = z_old, C = C_old, V = V_old, x = out)
+}
+environment(update_normal_equation) <- .temp_env
+```
+
+```{r show_chol_update}
+# simulate covariates
+p <- 10L
+n <- 100L
+set.seed(1)
+X <- matrix(rnorm(p * n), n) + 2
+
+# illustrate Cholesky decomposition update
+i <- 1:(p - 2L)
+C <- chol(crossprod(X))
+C_sub_1 <- chol(crossprod(X[, i]))
+C_other <- chol_add(C_sub_1, crossprod(X)[, -i])
+all.equal(C, C_other)
+```
+
+```{r test_show_chol_update, echo = FALSE}
+stopifnot(isTRUE(all.equal(C, C_other)))
+```
+
+Solving with a Cholesky of the Gramian matrix has a relative error which 
+depends on the squared 2-norm condition number of the original design matrix
+
+$$
+\kappa_2(X)^2 = \left(\frac{\sigma_\text{max}(X)}{\sigma_\text{min}(X)}\right)^2
+$$
+However, adding a L2 penalty of $\lambda$ as suggested in @friedman91 yields 
+a relative errors which depends on 
+
+$$
+\left(\frac{
+  \sqrt{\sigma_\text{max}(X)^2 + \lambda}}{
+  \sqrt{\sigma_\text{min}(X)^2 + \lambda}}\right)^2
+  = \frac{
+  \sigma_\text{max}(X)^2 + \lambda}{
+  \sigma_\text{min}(X)^2 + \lambda}
+$$
+
+if I am correct. This is small if lambda is large enough. Further, one needs 
+to solve many normal equation and quickly update the needed quantities to 
+do the computation. The `get_basis` return the hinge 
+function and the covariate value as need in Equation (51) in @friedman91. 
+`update_normal_equation` makes the updates as in @friedman91 [pp. 29-30]. 
+The code below is mainly to show that we get the same.
+
+```{r solve_first_it}
+# simulate outcome
+set.seed(1)
+y <- rnorm(n)
+x1 <- X[, 1]
+lambda <- 100 # penalty parameter
+
+# get basis and solve with normal equation with Cholesky decomposition
+B <- get_basis(x = x1)
+Bmat <- model.matrix(~ . - 1, B)
+Bmat_cen <- scale(Bmat, center = TRUE, scale = FALSE)
+
+y_cen <- y - mean(y)
+z <- drop(crossprod(Bmat, y_cen))
+V <- crossprod(Bmat_cen)
+(s1 <- solve(V + diag(lambda, 2L), z))
+
+# compute Cholesky decomposition using QR decomposition. More stable but 
+# takes more time
+C <- qr.R(qr(rbind(Bmat_cen, diag(sqrt(lambda), 2))))
+(s2 <- chol_solve(C, z)) # with Cholesky decomposition
+
+# or using `update_normal_equation`
+z <- c(drop(crossprod(Bmat[, 1L], y_cen)), 0)
+V <- diag(lambda, 2)
+V[1, 1] <- V[1, 1] + sum(Bmat_cen[, 1]^2)
+C <- sqrt(V)
+
+Bnew <- update_normal_equation(
+  x = B$xk, z_old = z, C_old = C, Bmat_cen = 
+    matrix(nr = length(B$xk), nc = 0L), 
+  y_cen = y_cen, V_old = V, first_call = TRUE)
+z <- Bnew$z
+C <- Bnew$C
+V <- Bnew$V
+
+(s3 <- chol_solve(C, z))
+
+# or not with augmented design matrix (essentially the same as in the start)
+V <- crossprod(Bmat_cen) + diag(lambda, 2L)
+C <- chol(V)
+(s4 <- chol_solve(C, z))
+```
+
+```{r test_solve_first_it, echo = FALSE}
+stopifnot(isTRUE(all.equal(s1, s2, check.attributes = FALSE)), 
+          isTRUE(all.equal(s1, s4, check.attributes = FALSE)),
+          # maybe not the best idea...
+          isTRUE(all.equal(s1, s3, check.attributes = FALSE, 
+                           tolerance = 1e-6)))
+```
+
+The `update_normal_equation` can also be used to move the knot position.
+
+```{r move_knot}
+k_new <- 2
+Bnew <- update_normal_equation(
+  x = B$xk, knot_new = k_new, z_old = z, C_old = C, y_cen = y_cen, V_old = V, 
+  Bmat_cen = matrix(nr = length(B$xk), nc = 0L), first_call = FALSE)
+
+# we need this for the next chunk of code
+z <- Bnew$z
+
+# compare with solution by starting over
+B_other <- get_basis(x = x1, knot = k_new)
+B_other <- model.matrix(~ . - 1, B_other)
+z_other <- drop(crossprod(B_other, y_cen))
+B_other_cen <- scale(B_other, center = TRUE, scale = FALSE)
+V_other <- crossprod(B_other_cen) + diag(lambda, 2L)
+C_other <- chol(V_other)
+
+# gives the same
+all.equal(Bnew$z, z_other, check.attributes = FALSE)
+all.equal(Bnew$C, C_other, check.attributes = FALSE)
+all.equal(Bnew$V, V_other)
+```
+
+```{r lambda_zero_move_knot, echo = FALSE}
+local({
+  B_other <- get_basis(x = x1, knot = k_new)
+  B_other <- model.matrix(~ . - 1, B_other)
+  z_other <- drop(crossprod(B_other, y_cen))
+  B_other <- scale(B_other, center = TRUE, scale = FALSE)
+  V_other <- crossprod(B_other)
+  
+  c1 <- solve(V_other, z_other)
+  c2 <- coef(lm(y_cen ~ B_other - 1))
+  
+  stopifnot(all.equal(c1, c2, check.attributes = FALSE))
+})
+```
+
+```{r test_move_knot, echo = FALSE}
+stopifnot(
+  isTRUE(all.equal(Bnew$z, z_other, check.attributes = FALSE)),
+  isTRUE(all.equal(Bnew$C, C_other, check.attributes = FALSE)),
+  isTRUE(all.equal(Bnew$V, V_other)))
+```
+
+We will need to add new terms once we have covariates in the model. This 
+can be done as follows.
+
+```{r add_new}
+B_parent <- model.matrix(~ . - 1, get_basis(x = x1, knot = k_new))
+B_parent_center <- scale(B_parent, scale = FALSE)
+
+x2 <- X[, 3]
+knot_2 <- 1
+B_child <- get_basis(x = x2, parent = B_parent[, 2], knot = knot_2)
+
+# sparse
+mean(as.matrix(B_child) == 0)
+
+z <- c(z, drop(crossprod(B_child[, 1L], y_cen)), 0)
+
+# using update formulas from Friedman (1991)
+v1 <- crossprod(B_parent_center, B_child[, 1])
+v1 <- c(v1, sum(scale(B_child[, 1], scale = FALSE)^2) + lambda, 0)
+v1 <- cbind(v1, c(0, 0, 0, lambda))
+C <- chol_add(Bnew$C, v1)
+V <- matrix(nc = 4, nr = 4)
+V[  1:2 ,   1:2 ] <- Bnew$V
+V[      , -(1:2)] <-   v1
+V[-(1:2),       ] <- t(v1)
+
+Bnew <- update_normal_equation(
+  x = B_child$xk, knot_new = k_new, z_old = z, C_old = C, y_cen = y_cen, 
+  V_old = V, Bmat_cen = B_parent_center, first_call = TRUE)
+(s1 <- chol_solve(Bnew$C, Bnew$z))
+
+# do it all over
+B_all <- cbind(B_parent, as.matrix(B_child))
+z <- crossprod(B_all, y_cen)
+B_all <- scale(B_all, scale = FALSE)
+(s2 <- drop(solve(crossprod(B_all) + diag(lambda, 4), z)))
+```
+
+```{r test_add_new, echo = FALSE}
+stopifnot(isTRUE(all.equal(s1, s2, check.attributes = FALSE)))
+```
+
+## High-Level Implementation Details
+MARS can be seen as a tree. Each node has a set what we will call *active* 
+observation which are non-zero and *active* covariates which are still 
+candidates to become a child node. A node can have multiple children. 
+There will be a lot on in-active observations as we go down the tree due to 
+the hinge functions. The algorithm can be as follows: 
+
+1. center and scale covariates and center outcomes. Store the means and 
+   standard deviations for later (e.g., for prediction on new data sets). 
+2. compute the orders for each covariate. Store it in an object where it is 
+   fast to subset according to a subset of currenlty active observations. 
+   Compute weights at each unique value of each covariate.
+3. set the root to be a node with just a constant equal to one. Set the  
+   centered design matrix to be empty, the Gramian matrix to be empty, and 
+   the right-hand-side of the normal equation to be empty.
+4. for each node in the tree and for each active covariate in the node 
+  -  find the knot which minimizes squared error and store the squared error 
+     and the knot. Details are given below. 
+5. add two nodes at the knot found at 4. with the smallest squared error. 
+   Use two hinges functions instead of an identity fucntion and a hinge 
+   function. The former is sparse and reduces the computation cost. In each 
+   node, create objects with active covariates and observations and the 
+   value of the hinge function. Add the centered values of the two new nodes 
+   to the centered design matrix. Update the Gramian matrix, Cholesky 
+   decomposition, and right-hand-side of the normal equation.
+6. Repeat 4. if we still have not reached the request number of nodes.
+
+The main computational burden is at 4. above. This can be done as follows, 
+
+1. Get the order of the covariate for the subset of active nodes. 
+2. Using 1., get the ordered design matrix, ordered outcome, and ordered
+   covariate value. This requires copies but this will be presumably be made 
+   up for by avoiding (many) cache misses later.
+3. Compute the knots to consder [@friedman91, pp. 26-28].
+4. Augment left- and right-hand-side of normal equation with two new entries. 
+   Handle the first new index which is for the term with an identity link 
+   function.
+5. Loop over knot position and keep track of the one with the smallest 
+   squared error.
+
+```{r def_funcs, eval = FALSE}
+```
+
+## References
