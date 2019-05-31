@@ -1,3 +1,4 @@
+#ifdef IS_R_BUILD
 #include "normal-eq.h"
 #include <array>
 #include <testthat.h>
@@ -57,3 +58,4 @@ context("Testing normal equation class") {
     }
   }
 }
+#endif

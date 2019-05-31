@@ -1,4 +1,5 @@
 context("C++")
 test_that("Catch unit tests pass", {
-    expect_cpp_tests_pass("Oumuamua")
+  set.seed(1L)
+  expect_cpp_tests_pass("Oumuamua")
 })

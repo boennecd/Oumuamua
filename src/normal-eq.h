@@ -32,10 +32,9 @@ public:
   void update(const arma::mat &V, const arma::vec &k) {
     const unsigned p = V.n_rows, n = C.get_decomp().n_rows;
 #ifdef OUMU_DEBUG
-    if(V.n_cols != k.n_elem or V.n_rows <= n)
+    if(V.n_cols != k.n_elem or V.n_rows <= n or V.n_rows - n != k.n_elem)
       throw std::invalid_argument("Invalid 'V' or 'k' in 'normal_equation::update'");
 #endif
-
     {
       const arma::span sold(0L, n - 1L), snew(n, p - 1L);
       arma::vec z_new(p);
@@ -49,6 +48,14 @@ public:
 
   arma::vec get_coef() const {
     return C.solve(z);
+  }
+
+  const arma::vec& get_rhs() const {
+    return z;
+  }
+
+  unsigned n_elem() const {
+    return z.n_elem;
   }
 };
 

@@ -5,5 +5,8 @@
 #define ARMA_NO_DEBUG
 #endif
 
+#ifdef IS_R_BUILD
 #include <RcppArmadillo.h>
+#endif
+
 #endif

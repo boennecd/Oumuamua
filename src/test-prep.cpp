@@ -1,3 +1,4 @@
+#ifdef IS_R_BUILD
 #include "prep-covs-n-outcome.h"
 #include <array>
 #include <testthat.h>
@@ -61,3 +62,4 @@ context("Testing 'XY_dat'") {
     }
   }
 }
+#endif

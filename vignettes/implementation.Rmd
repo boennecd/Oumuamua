@@ -1,18 +1,15 @@
 ---
 title: "Implementation Details"
-output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Implementation details}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+output: 
+  rmarkdown::html_notebook:
+    code_folding: "hide"
 bibliography: vig-bif.bib
 ---
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE, error = FALSE,
-  comment = "#R"
-)
+  collapse = TRUE, error = FALSE, comment = "#R")
+options(digits = 3)
 ```
 
 This is a short document describing implementation details. 
@@ -127,33 +124,33 @@ update_normal_equation <- function(
   
   # make update X^T y
   z_old[idx_new] <- z_old[idx_new] + 
-    sum(
-      y_cen[new_active] * parent[new_active] * (org[new_active] - knot_new)) + 
-    (knot_old - knot_new) * sum(y_cen[active] * parent[active])
+    drop(
+      y_cen[new_active] %*% (parent[new_active] * (org[new_active] - knot_new))) + 
+    (knot_old - knot_new) * drop(y_cen[active] %*% parent[active])
   
   # make update of cross product of design matrix
   Vc_new <- V_old[, idx_new]
   if(NCOL(Bmat_cen) > 0L){
     Vc_new[idx_old] <- Vc_new[idx_old] + 
-      colSums(
-        Bmat_cen[new_active, idx_old, drop = FALSE] * parent[new_active] * (
+      crossprod(
+        Bmat_cen[new_active, idx_old, drop = FALSE], parent[new_active] * (
           org[new_active] - knot_new)) + 
-      (knot_old - knot_new) * colSums(
-        Bmat_cen[active, idx_old, drop = FALSE] * parent[active])
+      (knot_old - knot_new) * crossprod(
+        Bmat_cen[active, idx_old, drop = FALSE], parent[active])
   }
   # update the part with the linear term
   idx_lin <- idx_new - 1L
   Vc_new[idx_lin] <- Vc_new[idx_lin] + 
-      sum(
-        org_parent_cen[new_active] * parent[new_active] * (
-          org[new_active] - knot_new)) + 
-      (knot_old - knot_new) * sum(
-        org_parent_cen[active] * parent[active])
+      drop(
+        org_parent_cen[new_active] %*% (parent[new_active] * (
+          org[new_active] - knot_new))) + 
+      (knot_old - knot_new) * drop(
+        org_parent_cen[active] %*% parent[active])
   
   # update diagonal entry
   Vc_new[idx_new] <-  Vc_new[idx_new] + 
     sum((parent[new_active] * (org[new_active] - knot_new))^2) + 
-    (knot_old - knot_new) * sum(parent[active]^2 * (
+    (knot_old - knot_new) * drop(parent[active]^2 %*% (
       2 * org[active] - knot_old - knot_new)) + 
     (sum(parent[active] * (org[active] - knot_old))^2 - 
        sum(parent[all.] * (org[all.] - knot_new))^2) / NROW(Bmat_cen)
@@ -215,7 +212,7 @@ The code below is mainly to show that we get the same.
 
 ```{r solve_first_it}
 # simulate outcome
-set.seed(1)
+set.seed(2)
 y <- rnorm(n)
 x1 <- X[, 1]
 lambda <- 100 # penalty parameter
@@ -299,9 +296,11 @@ local({
   V_other <- crossprod(B_other)
   
   c1 <- solve(V_other, z_other)
-  c2 <- coef(lm(y_cen ~ B_other - 1))
+  c2 <- coef(lm_fit <- lm(y_cen ~ B_other - 1))
   
-  stopifnot(all.equal(c1, c2, check.attributes = FALSE))
+  stopifnot(all.equal(c1, c2, check.attributes = FALSE), 
+            all.equal(sum(lm_fit$residuals^2), 
+                      drop(sum(y_cen^2) - c1 %*% z_other)))
 })
 ```
 
@@ -361,8 +360,9 @@ candidates to become a child node. A node can have multiple children.
 There will be a lot on in-active observations as we go down the tree due to 
 the hinge functions. The algorithm can be as follows: 
 
-1. center and scale covariates and center outcomes. Store the means and 
-   standard deviations for later (e.g., for prediction on new data sets). 
+1. multiply covariates and outcomes by the square root of the weights.
+   Center and scale covariates and center outcomes. Store the means and 
+   standard deviations for later (e.g., for prediction on new data sets).
 2. compute the orders for each covariate. Store it in an object where it is 
    fast to subset according to a subset of currenlty active observations. 
    Compute weights at each unique value of each covariate.
@@ -384,10 +384,12 @@ the hinge functions. The algorithm can be as follows:
 The main computational burden is at 4. above. This can be done as follows, 
 
 1. Get the order of the covariate for the subset of active nodes. 
-2. Using 1., get the ordered design matrix, ordered outcome, and ordered
-   covariate value. This requires copies but this will be presumably be made 
-   up for by avoiding (many) cache misses later.
-3. Compute the knots to consder [@friedman91, pp. 26-28].
+2. Using 1.-2. above, get the ordered design matrix, ordered outcome, and 
+   ordered covariate value. This requires copies but this will be presumably
+   be made up for by avoiding (many) cache misses later.
+3. Compute the knots to consder [@friedman91, pp. 26-28]. Only add a linear 
+   term if there is two unique values. Return nothing here if there is only 
+   one unique value.
 4. Augment left- and right-hand-side of normal equation with two new entries. 
    Handle the first new index which is for the term with an identity link 
    function.
