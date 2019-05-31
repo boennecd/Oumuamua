@@ -2,54 +2,70 @@
 
 using std::to_string;
 
-new_node_res get_new_node
-  (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
-   const arma::vec &parent, const arma::mat &B, const arma::vec &knots,
-   const double lambda, const unsigned N){
-  const arma::uword n = x.n_elem, p = B.n_cols, p1 = p + 1;
-  const bool fresh = p < 1L;
-  const double dN = N;
+inline arma::span get_sold(const bool fresh, const unsigned p){
+  return fresh ? arma::span() : arma::span(0L, p - 1L);
+}
 
+inline void check_new_node_input
+  (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
+   const arma::vec &parent, const arma::mat &B, const double lambda,
+   const unsigned N, const std::string &msg_prefix,
+   const arma::vec *knots){
 #ifdef OUMU_DEBUG
-  auto invalid_arg = [](const std::string &msg){
-    throw std::invalid_argument("'get_new_node': " + msg);
+  const arma::uword n = x.n_elem, p = B.n_cols;
+
+  auto invalid_arg = [&](const std::string &msg){
+    throw std::invalid_argument(msg_prefix + msg);
   };
   if(N < n)
     invalid_arg("too small 'N' (" + to_string(N) + ", " + to_string(n) + ")");
-  if(knots.n_elem > n - 2L)
-    invalid_arg("too many knots (" + to_string(knots.n_elem) + ", " +
-      to_string(n) + ")");
-  if(knots[0L] >= x[0L])
-    invalid_arg("first knot is not an interior knot");
-  if(knots.tail(1L)(0L) <= x.tail(1L)(0L))
-    invalid_arg("last knot is not an interior knot");
+  if(knots){
+    if(knots->n_elem > n - 2L)
+      invalid_arg("too many knots (" + to_string(knots->n_elem) + ", " +
+        to_string(n) + ")");
+    if(knots->operator[](0L) >= x[0L])
+      invalid_arg("first knot is not an interior knot");
+    if(knots->tail(1L)(0L) <= x.tail(1L)(0L))
+      invalid_arg("last knot is not an interior knot");
+  }
   if(old_problem.n_elem() != p)
     invalid_arg("invalid 'old_problem' or 'B'");
   if(B.n_rows != n or y.n_elem != n or parent.n_elem != n)
     invalid_arg("invalid 'B', 'parent', or 'y'");
   {
-    arma::vec tmp = arma::diff(x);
-    arma::uvec utmp = arma::find(tmp > 0.);
-    if(utmp.n_elem > 0L)
-      invalid_arg("'x' is not decreasing");
+      arma::vec tmp = arma::diff(x);
+      arma::uvec utmp = arma::find(tmp > 0.);
+      if(utmp.n_elem > 0L)
+        invalid_arg("'x' is not decreasing");
 
-    tmp = arma::diff(knots);
-    utmp = arma::find(tmp >= 0.);
-    if(utmp.n_elem > 0L)
-      invalid_arg("'knots' is not decreasing");
+      if(knots){
+        tmp = arma::diff(*knots);
+        utmp = arma::find(tmp >= 0.);
+        if(utmp.n_elem > 0L)
+          invalid_arg("'knots' is not decreasing");
+      }
   }
 #endif
+}
 
-  /* setup V and k. Handle the first part for the term with the idenity
-   * function */
-  const arma::span sold =
-    fresh ? arma::span() : arma::span(0L, p - 1L);
+add_linear_term_res add_linear_term
+  (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
+   const arma::vec &parent, const arma::mat &B, const double lambda,
+   const unsigned N){
+  const arma::uword n = x.n_elem, p = B.n_cols;
+  const bool fresh = p < 1L;
+  const double dN = N;
+
+  check_new_node_input(
+    old_problem, x, y, parent, B, lambda, N, "'add_linear_term': ",
+    nullptr);
+
+  const arma::span sold = get_sold(fresh, p);
   arma::mat V(p + 1L, 1L, arma::fill::zeros);
   arma::vec k(1L, arma::fill::zeros);
   const arma::vec x_parent = x % parent;
   const double x_parent_mean = arma::sum(x_parent) / dN;
   const arma::vec x_cen = x_parent - x_parent_mean;
-
   if(!fresh)
     V.rows(sold) = B.t() * x_parent;
 
@@ -58,15 +74,33 @@ new_node_res get_new_node
   V(p, 0L) += lambda + x_parent_mean * x_parent_mean * (dN - n);
   k.at(0) = arma::dot(x_parent, y);
 
-  const normal_equation problem_w_lin_term = ([&]{
-    normal_equation out = old_problem;
-    out.update(V, k);
-    return out;
-  })();
+  normal_equation out = old_problem;
+  out.update(V, k);
+  return { std::move(out), std::move(x_cen) };
+}
+
+new_node_res get_new_node
+  (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
+   const arma::vec &parent, const arma::mat &B, const arma::vec &knots,
+   const double lambda, const unsigned N){
+  const arma::uword n = x.n_elem, p = B.n_cols, p1 = p + 1;
+  const bool fresh = p < 1L;
+  const double dN = N;
+
+  check_new_node_input(
+    old_problem, x, y, parent, B, lambda, N, "'get_new_node': ",
+    &knots);
+
+  /* Handle the first part for the term with the idenity function */
+  const auto lin_term_obj = add_linear_term
+    (old_problem, x, y, parent, B, lambda, N);
+  const arma::vec &x_cen = lin_term_obj.x_cen;
+  const normal_equation &problem_w_lin_term = lin_term_obj.new_eq;
 
   /* prep for going through knot */
-  V.zeros(p + 2L, 1L);
-  k.zeros(1L);
+  const arma::span sold = get_sold(fresh, p);
+  arma::mat V(p + 2L, 1L, arma::fill::zeros);
+  arma::vec k(1L, arma::fill::zeros);
 
   /* handle penalty term for hinge function */
   V(p1, 0L) = lambda;

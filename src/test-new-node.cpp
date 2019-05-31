@@ -9,7 +9,7 @@
 
 static constexpr unsigned N = 25;
 
-context("Testing 'get_new-node'") {
+context("Testing 'get_new-node' and 'add_linear_term'") {
   auto get_data = [&]{
     Rcpp::RNGScope rngScope;
     arma::mat X(N, 2L);
@@ -24,6 +24,97 @@ context("Testing 'get_new-node'") {
 
     return std::make_pair(std::move(X), std::move(y));
   };
+
+  test_that("'add_linear_term' gives correct result without parent") {
+    auto brute_solve = []
+    (const arma::vec &x, const arma::vec &y_cen, const double lambda){
+      /* dump version of doing this */
+      const arma::mat x_cen = x - arma::mean(x);
+      arma::vec V(1, 1);
+      V(0, 0) = arma::dot(x_cen, x_cen) + lambda;
+      arma::vec k(1);
+      k.at(0) = arma::dot(x, y_cen);
+
+      return normal_equation(V, k);
+    };
+
+    for(unsigned i = 0; i < 5L; ++i){
+      auto XY = get_data();
+      arma::mat X = std::move(XY.first);
+      arma::vec y = std::move(XY.second);
+      arma::vec x = X.col(0);
+      double lambda = 10.;
+
+      auto brute = brute_solve(x, y, lambda);
+
+      sort_keys idx(x);
+      x = x(idx.order());
+      y = y(idx.order());
+      const arma::vec parent(N, arma::fill::ones);
+
+      normal_equation old;
+      const arma::mat B(N, 0L);
+
+      auto res = add_linear_term(old, x, y, parent, B, lambda, N);
+
+      expect_true(is_all_aprx_equal(brute.get_rhs(), res.new_eq.get_rhs()));
+
+      const arma::vec c1 = res.new_eq.get_coef(), c2 = brute.get_coef();
+      expect_true(is_all_aprx_equal(c1, c2));
+    }
+  }
+
+  test_that("'add_linear_term' gives correct result with parent") {
+    auto brute_solve = []
+    (const arma::vec &x, const arma::vec &y_cen, const double lambda,
+     const arma::vec &parent){
+      arma::mat B(N, 2L);
+      B.col(0) = parent;
+      B.col(1) = parent % x;
+
+      arma::mat B_cen = B;
+      center_cov(B_cen, 0);
+      center_cov(B_cen, 1);
+
+      arma::mat V = B_cen.t() * B_cen;
+      V.diag() += lambda;
+
+      arma::vec k = B.t() * y_cen;
+
+      return normal_equation(V, k);
+    };
+
+    for(unsigned i = 0; i < 5L; ++i){
+      auto XY = get_data();
+      arma::mat X = std::move(XY.first);
+      arma::vec y = std::move(XY.second),
+                x = X.col(1);
+      arma::vec parent = X.col(0);
+      set_hinge(parent, 0, 1, 1);
+      double lambda = 10.;
+
+      auto brute = brute_solve(x, y, lambda, parent);
+
+      arma::vec parent_cen = parent - mean(parent);
+      normal_equation old(parent_cen.t() * parent_cen + lambda,
+                          parent.t() * y);
+
+      sort_keys idx(x);
+      idx.subset(arma::find(parent.col(0) > 0));
+
+      x = x(idx.order());
+      y = y(idx.order());
+      parent = parent(idx.order());
+      parent_cen = parent_cen(idx.order());
+
+      auto res = add_linear_term(old, x, y, parent, parent_cen, lambda, N);
+
+      expect_true(is_all_aprx_equal(brute.get_rhs(), res.new_eq.get_rhs()));
+
+      const arma::vec c1 = res.new_eq.get_coef(), c2 = brute.get_coef();
+      expect_true(is_all_aprx_equal(c1, c2));
+    }
+  }
 
   test_that("'get_new_node' gives correct result without parent") {
     auto brute_solve = []
@@ -85,7 +176,7 @@ context("Testing 'get_new-node'") {
   test_that("'get_new_node' gives correct result with parent") {
     auto brute_solve = []
     (const arma::vec &x, const arma::vec &y_cen, const arma::vec &knots,
-     const double lambda, const arma::vec &parent, const arma::mat B_cen){
+     const double lambda, const arma::vec &parent, const arma::mat &B_cen){
       const arma::mat B_base = ([&]{
         arma::mat out(B_cen.n_rows, 4L);
         out.cols(0, 1) = B_cen;

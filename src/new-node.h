@@ -40,4 +40,19 @@ new_node_res get_new_node
    const arma::vec &parent, const arma::mat &B, const arma::vec &knots,
    const double lambda, const unsigned N);
 
+struct add_linear_term_res {
+  /* updated normal equation with covariate times parent */
+  normal_equation new_eq;
+  /* covariate times parent for subset of active observations. The term is
+   * centered */
+  arma::vec x_cen;
+};
+
+/* similar function to the one above but only adds an interaction between
+ * the identity function and the parent node effect. */
+add_linear_term_res add_linear_term
+  (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
+   const arma::vec &parent, const arma::mat &B, const double lambda,
+   const unsigned N);
+
 #endif
