@@ -10,7 +10,7 @@ inline void check_new_node_input
   (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
    const arma::vec &parent, const arma::mat &B, const double lambda,
    const unsigned N, const std::string &msg_prefix,
-   const arma::vec *knots){
+   const arma::vec *knots, const bool check_order){
 #ifdef OUMU_DEBUG
   const arma::uword n = x.n_elem, p = B.n_cols;
 
@@ -32,7 +32,7 @@ inline void check_new_node_input
     invalid_arg("invalid 'old_problem' or 'B'");
   if(B.n_rows != n or y.n_elem != n or parent.n_elem != n)
     invalid_arg("invalid 'B', 'parent', or 'y'");
-  {
+  if(check_order){
       arma::vec tmp = arma::diff(x);
       arma::uvec utmp = arma::find(tmp > 0.);
       if(utmp.n_elem > 0L)
@@ -58,7 +58,7 @@ add_linear_term_res add_linear_term
 
   check_new_node_input(
     old_problem, x, y, parent, B, lambda, N, "'add_linear_term': ",
-    nullptr);
+    nullptr, false);
 
   const arma::span sold = get_sold(fresh, p);
   arma::mat V(p + 1L, 1L, arma::fill::zeros);
@@ -89,7 +89,7 @@ new_node_res get_new_node
 
   check_new_node_input(
     old_problem, x, y, parent, B, lambda, N, "'get_new_node': ",
-    &knots);
+    &knots, true);
 
   /* Handle the first part for the term with the idenity function */
   const auto lin_term_obj = add_linear_term
@@ -171,8 +171,7 @@ new_node_res get_new_node
     /* update solution */
     normal_equation new_problem = problem_w_lin_term;
     new_problem.update(V, k);
-    const arma::vec coef = new_problem.get_coef();
-    const double se = -arma::dot(coef, new_problem.get_rhs());
+    const double se = get_min_se_less_var(new_problem);
     if(se < out.min_se_less_var){
       out.min_se_less_var = se;
       out.knot = *knot;

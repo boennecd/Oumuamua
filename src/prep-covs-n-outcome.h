@@ -9,15 +9,10 @@ struct XY_dat {
   const arma::vec &y;
   const arma::mat &X;
 
-  /* weighted outcomes and covariates */
-  arma::vec sqw_y;
-  arma::mat sqw_X;
-
-  /* centered weighted outcomes, covariates, covariates means, and scales */
+  /* centered weighted outcomes, scaled covariates, and scales */
   arma::vec c_sqw_y;
-  arma::mat c_sqw_X;
+  arma::mat s_sqw_X;
   arma::rowvec X_scales;
-  arma::rowvec X_means;
 
   /* Args:
    *   1: outcomes.

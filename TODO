@@ -1,0 +1,9 @@
+test with dummies
+test with additive model
+test with deep model
+test with weigths (how does it work knot positions?)
+use ideas from fast MARS paper
+compare with mda and earth package
+implement different knot strategy
+find heuristic way to scale L2 penalty
+implement thresholding
