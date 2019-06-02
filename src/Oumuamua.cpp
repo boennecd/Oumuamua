@@ -7,6 +7,7 @@
 #include <numeric>
 #include <algorithm>
 #include "miscellaneous.h"
+#include "print.h"
 
 using std::size_t;
 static constexpr double no_knot = std::numeric_limits<double>::quiet_NaN();
@@ -14,8 +15,8 @@ static constexpr double no_knot = std::numeric_limits<double>::quiet_NaN();
 namespace {
   /* class to hold data to pass around */
   struct problem_data {
-    const arma::mat &X;
-    const arma::vec &Y;
+    const arma::mat X;
+    const arma::vec Y;
     const std::vector<sort_keys> keys;
     const unsigned endspan;
     const unsigned minspan;
@@ -96,6 +97,8 @@ namespace {
     const arma::vec &parent;
     /* normal equation before updates */
     const normal_equation &old_eq;
+    /* current centered design matrix */
+    const arma::mat &cur_design_mat;
 
     worker_res operator()() const {
       worker_res out;
@@ -103,7 +106,11 @@ namespace {
 
       /* get sorted covariate values and find knots */
       const sort_keys &key = dat.keys[cov_index];
-      const arma::vec x = dat.X.unsafe_col(cov_index)(key.order());
+      const arma::vec x = ([&]{
+        arma::vec out = dat.X.col(cov_index);
+        out = out(key.order());
+        return out;
+      })();
       auto knots = get_knots(x, dat);
 
       if(knots.n_unique < 2L){
@@ -113,7 +120,7 @@ namespace {
       }
 
       const arma::vec y = dat.Y(key.order());
-      const arma::mat B(y.n_elem, 0L);
+      const arma::mat B = cur_design_mat.rows(key.order());
       if(knots.n_unique < 3L or knots.knots.n_elem < 1L){
         /* could be a dummy. Include linear term */
         out.res = only_linear;
@@ -148,8 +155,8 @@ namespace {
     const normal_equation &old_eq;
     /* pointer to parent node */
     const extended_cov_node * const parent_node;
-    /* centered design matrix */
-    const arma::mat &design;
+    /* current centered design matrix */
+    const arma::mat &cur_design_mat;
 
   public:
     worker_res operator()() const {
@@ -170,7 +177,11 @@ namespace {
         return out;
       }
 
-      const arma::vec x = dat.X.unsafe_col(cov_index)(key.order());
+      const arma::vec x = ([&]{
+        arma::vec out = dat.X.col(cov_index);
+        out = out(key.order());
+        return out;
+      })();
       auto knots = get_knots(x, dat);
       if(knots.n_unique < 2L){
         /* no variation in x */
@@ -183,7 +194,7 @@ namespace {
       const arma::vec y = dat.Y(key.order()),
              /* TODO: avoid needing to have a full parent vector? */
              parent_use = parent(key.order());
-      const arma::mat B = design.rows(key.order());
+      const arma::mat B = cur_design_mat.rows(key.order());
       if(knots.n_unique < 3L or knots.knots.n_elem < 1L){
         /* could be a dummy. Include linear term */
         out.res = only_linear;
@@ -205,6 +216,31 @@ namespace {
       return out;
     }
   };
+
+  /* GCV criterion with complexity function from Friedman (1992) */
+  struct gcv {
+    const double dN, Y_var, penalty;
+    const unsigned &n_terms;
+
+    struct gcv_output {
+      const double gcv;
+      const double Rsq;
+    };
+
+    gcv_output operator()
+      (const double &min_se_less_var, const unsigned n_new_terms) const {
+      /* TODO: account for L2 penalty? */
+      const double ss_reg = (Y_var + min_se_less_var / dN),
+                gcv_denum = 1. - get_complexity(n_new_terms) / dN;
+      return { ss_reg / (gcv_denum * gcv_denum),
+               1 - ss_reg / Y_var };
+    }
+
+    double get_complexity(const unsigned n_new_terms) const {
+      const double n_total = n_terms + n_new_terms;
+      return n_total  * (1. + penalty) + 1.;
+    }
+  };
 }
 
 template<class T>
@@ -217,7 +253,11 @@ void remove_first(T& container, const typename T::value_type value){
 omua_res omua
   (const arma::mat &X, const arma::vec &Y, const arma::vec &W,
    const double lambda, const unsigned endspan, const unsigned minspan,
-   const unsigned degree, const unsigned nk, const double penalty){
+   const unsigned degree, const unsigned nk, const double penalty,
+   const unsigned trace, const double thresh){
+  if(trace > 0)
+    Oout << "Starting model estimation\n";
+
   /* number of observations */
   const size_t N = X.n_rows;
 #ifdef OUMU_DEBUG
@@ -247,7 +287,7 @@ omua_res omua
 
   /* set problem data object to use */
   const problem_data dat = ([&]{
-    XY_dat dat(X, Y, W);
+    XY_dat dat(Y, X, W);
     out.X_scales = dat.X_scales.t();
 
     /* sorted indices for later */
@@ -255,7 +295,7 @@ omua_res omua
       std::vector<sort_keys> out;
       out.reserve(n_covs);
       for(unsigned i = 0; i < n_covs; ++i)
-        out.emplace_back(dat.s_sqw_X.unsafe_col(i));
+        out.emplace_back(dat.s_sqw_X.col(i));
 
       return out;
     })();
@@ -273,6 +313,7 @@ omua_res omua
    * a covariate with all-equal values or we have dummies) */
   std::vector<arma::uword> active_root_covs(dat.X.n_cols);
   std::iota(active_root_covs.begin(), active_root_covs.end(), 0L);
+  const std::vector<arma::uword> root_covs = active_root_covs;
 
   /* vector of ones used in 'root_worker' */
   const arma::vec root_parent(N, arma::fill::ones);
@@ -283,31 +324,33 @@ omua_res omua
   /* variance of Y */
   const double dN = (double)dat.N, Y_var = arma::dot(dat.Y, dat.Y) / dN;
 
-  /* computes the GCV */
-  auto gcv = [&](const double &min_se_less_var, const unsigned n_new_terms){
-    /* TODO: account for L2 penalty */
-    return (Y_var + min_se_less_var / dN) / (
-        1. - (n_terms + (double)n_new_terms) / dN);
-  };
-
   /* normal equation object we update */
   normal_equation eq;
 
   /* forward pass */
   std::vector<worker_res> results;
   results.reserve((int)(nk * 1.5 * X.n_cols)); /* TODO: find better value? */
+  unsigned it = 0L;
+  double old_Rsq = 0.;
+  struct gcv gcv_comp { dN, Y_var, penalty, n_terms };
   while(n_terms + 2L <= nk){
-    arma::mat current_design_mat(design_mat.begin(), dat.N, n_terms, false);
+    if(gcv_comp.get_complexity(2L) >= dN)
+      break;
+    it++;
+
+    /* current centered design matrix */
+    arma::mat cur_design_mat(design_mat.begin(), dat.N, n_terms, false);
 
     /* check root children */
     results.clear();
     for(auto i : active_root_covs){
-      root_worker task { dat, i, root_parent, eq };
+      root_worker task { dat, i, root_parent, eq, cur_design_mat };
       results.push_back(task());
     }
 
     if(degree > 1L){
       /* TODO: iterate through children */
+      throw std::runtime_error("not implemented");
     }
 
     /* find best new term */
@@ -325,8 +368,8 @@ omua_res omua
         throw std::runtime_error("not implemented");
       }
 
-      const double gcv_val = gcv(
-        r.min_se_less_var, r.res == hinge ? 2L : 1L);
+      const double gcv_val =
+        gcv_comp(r.min_se_less_var, r.res == hinge ? 2L : 1L).gcv;
       if(gcv_val < lowest_gcv){
         lowest_gcv = gcv_val;
         best = &r;
@@ -356,21 +399,22 @@ omua_res omua
         {
           const arma::uvec active_subset = arma::find(
             design_mat.col(desg_indx) > 0);
-          std::vector<arma::uword> active_covs = active_root_covs;
+          std::vector<arma::uword> active_covs = root_covs;
           remove_first(active_covs, cov_index);
 
-          const arma::vec &term = design_mat.unsafe_col(desg_indx);
           root_childrens.emplace_back(new extended_cov_node(
             cov_index, knot, sign, 0L, active_covs, dat.keys[cov_index],
-            std::move(active_subset), design_mat.unsafe_col(desg_indx)));
+            std::move(active_subset), design_mat.col(desg_indx)));
         }
 
         /* update normal equation */
         arma::vec k(1);
         k.at(0) = arma::dot(design_mat.col(desg_indx), dat.Y);
         center_cov(design_mat, desg_indx);
-        arma::mat V = design_mat.t() * design_mat.col(desg_indx);
+        arma::mat V =
+          design_mat.cols(0, desg_indx).t() * design_mat.col(desg_indx);
         V(desg_indx, 0) += lambda;
+
         eq.update(V, k);
       };
 
@@ -393,29 +437,37 @@ omua_res omua
         /* remove this index from the root. Dont want to add it again */
         remove_first(active_root_covs, cov_index);
 
-        const arma::vec &term = design_mat.unsafe_col(desg_indx);
         root_childrens.emplace_back(new extended_cov_node(
             cov_index, knot, 0, 0L, active_root_covs, dat.keys[cov_index],
-            std::move(active_subset), design_mat.unsafe_col(desg_indx)));
+            std::move(active_subset), design_mat.col(desg_indx)));
 
         /* update normal equation */
         arma::vec k(1);
         k.at(0) = arma::dot(design_mat.col(desg_indx), dat.Y);
         center_cov(design_mat, desg_indx);
-        arma::mat V = design_mat.t() * design_mat.col(desg_indx);
+        arma::mat V =
+          design_mat.cols(0, desg_indx).t() * design_mat.col(desg_indx);
         V(desg_indx, 0) += lambda;
         eq.update(V, k);
       }
     } else
       throw std::runtime_error("unsupported 'res_type'");
 
-#ifdef OUMU_DEBUG
-    const double new_gcv = gcv(get_min_se_less_var(eq), 0L);
-    if(std::abs((new_gcv - lowest_gcv) / (new_gcv + 1e-8)) > 1e-6)
-      throw std::runtime_error(
-          "GCVs do not match (" + std::to_string(new_gcv) + ", " +
-            std::to_string(lowest_gcv));
-#endif
+    auto stats = gcv_comp(get_min_se_less_var(eq), 0L);
+    if(trace > 0){
+      OPRINTF("Ended iteration %4d: GCV, R^2: %14.4f, %14.4f\n",
+              it, stats.gcv, stats.Rsq);
+      if(!best->parent){
+        OPRINTF("Term at covariate %5d and knot at %14.4f\n",
+                best->cov_index,
+                best->knot * out.X_scales.at(best->cov_index));
+      } else
+        throw std::runtime_error("not implemented");
+    }
+
+    if(stats.Rsq < old_Rsq + thresh)
+      break;
+    old_Rsq = stats.Rsq;
   }
 
   /* backward pass. TODO: implement */

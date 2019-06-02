@@ -29,7 +29,8 @@ inline void check_new_node_input
       invalid_arg("last knot is not an interior knot");
   }
   if(old_problem.n_elem() != p)
-    invalid_arg("invalid 'old_problem' or 'B'");
+    invalid_arg("invalid 'old_problem' or 'B' (" +
+      to_string(old_problem.n_elem()) + ", " + to_string(p) + ")");
   if(B.n_rows != n or y.n_elem != n or parent.n_elem != n)
     invalid_arg("invalid 'B', 'parent', or 'y'");
   if(check_order){

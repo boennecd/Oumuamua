@@ -61,8 +61,9 @@ void chol_decomp::update(const arma::mat &V) {
 
   /* update upper right block */
   new_chol(old_span, new_span) = V.rows(old_span);
+  const int nrhs = p - n;
   F77_CALL(dtrsm)(
-      &C_L, &C_U, &C_T, &C_N, &n, &n, &D_ONE, chol_.begin(), &n,
+      &C_L, &C_U, &C_T, &C_N, &n, &nrhs, &D_ONE, chol_.begin(), &n,
       new_chol.colptr(n), &p);
 
   /* update lower right block. TODO: do this inplace */

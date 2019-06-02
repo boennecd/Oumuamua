@@ -54,11 +54,14 @@ struct omua_res {
  *   degree: maximum degree of interactions.
  *   nk: maximum number of terms.
  *   penalty: d parameter in Friedman (1991) used in cost complexity function.
+ *   trace: integer where zero yields no information and higher values yields
+ *   more information.
+ *   thresh: threshold for minimum R^2.
  */
 omua_res omua
   (const arma::mat &X, const arma::vec &Y, const arma::vec &W,
    const double lambda, const unsigned endspan, const unsigned minspan,
-   const unsigned degree, const unsigned nk, const double penalty);
-
+   const unsigned degree, const unsigned nk, const double penalty,
+   const unsigned trace, const double thresh);
 
 #endif
