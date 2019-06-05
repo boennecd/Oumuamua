@@ -57,5 +57,32 @@ context("Testing normal equation class") {
       expect_true(is_all_aprx_equal(res, expect));
     }
   }
+
+  test_that("gives correct result after 'remove'") {
+    constexpr unsigned N = 5;
+    const arma::mat Q = create_mat<N, N>(
+    { 18.69, 5.25, 4.25, 2.83, 8.78, 5.25, 25.21, 5.59, -3.54, 10.1, 4.25, 5.59, 24.01, 4.16, -1.46, 2.83, -3.54, 4.16, 19.46, -1.98, 8.78, 10.1, -1.46, -1.98, 39.89 });
+    const arma::vec x = create_vec<N>({ 0.299, 2.078, -0.982, 0.277, -0.799 });
+
+    const normal_equation base_eq(Q, x);
+
+    for(unsigned i = 0; i < N; ++i){
+      const arma::uvec keep = ([&]{
+        arma::uvec out(N - 1L);
+        arma::uword *o = out.begin();
+        for(unsigned j = 0; j < N; ++j)
+          if(j != i)
+            *o++ = j;
+        return out;
+      })();
+
+      const normal_equation out = base_eq.remove(i),
+        expect(Q.submat(keep, keep), x(keep));
+
+      expect_true(is_all_aprx_equal(out.get_rhs(), expect.get_rhs()));
+      arma::vec x1 = out.get_coef(), x2 = expect.get_coef();
+      expect_true(is_all_aprx_equal(x1, x2));
+    }
+  }
 }
 #endif

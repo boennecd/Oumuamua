@@ -73,3 +73,69 @@ void chol_decomp::update(const arma::mat &V) {
 
   chol_ = std::move(new_chol);
 }
+
+inline void given_zero
+  (const unsigned i, const unsigned j, arma::mat &X){
+  const double a = X(i, i), b = X(j, i);
+  double c, s;
+  constexpr double eps = std::numeric_limits<double>::epsilon();
+  if(-eps < b and b < eps){
+    return;
+
+  } else {
+    if(std::abs(b) > std::abs(a)){
+      const double tau = - a / b;
+      s = 1 / std::sqrt(1 + tau * tau);
+      c = s * tau;
+    } else {
+      const double tau = - b / a;
+      c = 1 / std::sqrt(1 + tau * tau);
+      s = c * tau;
+    }
+  }
+
+  const unsigned N = X.n_cols;
+  bool flip_sign = false;
+  for(unsigned k = i; k < N; ++k){
+    const double tau1 = X(i, k),
+                 tau2 = X(j, k);
+    const double ival = c * tau1 - s * tau2;
+    if(k == i)
+      flip_sign = ival < 0.;
+    X(i, k) = flip_sign ? -ival : ival;
+    X(j, k) = s * tau1 + c * tau2;
+  }
+}
+
+chol_decomp chol_decomp::remove(const unsigned idx) const {
+  chol_decomp out;
+  if(chol_.n_cols < 2 and idx == 0)
+    return out;
+#ifdef OUMU_DEBUG
+  if(idx >= chol_.n_cols)
+    throw std::invalid_argument(
+        "'chol_decomp::remove_chol': index out of range");
+#endif
+
+  /* copy old values*/
+  const unsigned p = chol_.n_cols - 1, pm1 = p - 1;
+  out.chol_.resize(chol_.n_rows, p);
+  arma::mat &ch_out = out.chol_;
+  if(idx == 0)
+    ch_out = chol_.cols(1, p);
+  else if(idx == p)
+    ch_out = chol_.cols(0, p - 1);
+  else {
+    ch_out.cols(0  , idx - 1) = chol_.cols(0, idx - 1);
+    ch_out.cols(idx, pm1    ) = chol_.cols(idx + 1, p);
+  }
+
+  /* apply Givens rotations */
+  for(unsigned i = idx; i < p; ++i){
+    given_zero(i, i + 1, ch_out);
+    ch_out(i + 1, i) = 0.;
+  }
+
+  out.chol_ = out.chol_.rows(0, pm1);
+  return out;
+}

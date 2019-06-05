@@ -3,8 +3,10 @@
 #include <limits>
 #include <memory>
 #include <vector>
+#include <array>
 #include "arma.h"
-#include  <cmath>
+#include <cmath>
+#include <map>
 
 /* nodes in tree which represents the MARS model */
 class cov_node {
@@ -20,12 +22,17 @@ public:
   const unsigned depth;
   /* list of child nodes */
   std::vector<std::unique_ptr<cov_node> > children;
+  /* index at which the node was added */
+  const unsigned add_idx;
+  /* parent. Null pointer means that the parent is the root note */
+  const cov_node * const parent;
 
   cov_node
     (const unsigned cov_index, const double knot, const double sign,
-     const unsigned depth):
+     const unsigned depth, const unsigned add_idx,
+     const cov_node * const parent):
     cov_index(cov_index), knot(knot), has_knots(!std::isnan(knot)),
-    sign(sign < 0. ? -1. : 1.), depth(depth)
+    sign(sign < 0. ? -1. : 1.), depth(depth), add_idx(add_idx), parent(parent)
     { }
 
   virtual ~cov_node() = default;
@@ -36,8 +43,22 @@ struct omua_res {
   /* childrens of the root node (first node with an intercept) */
   std::vector<std::unique_ptr<cov_node> > root_childrens;
 
-  /* standard deviations of X */
+  /* standard deviations and means of X */
   arma::vec X_scales;
+  arma::vec X_means;
+  double y_mean;
+
+  /* vector with coefficients from backward pass */
+  std::vector<arma::vec> coefs;
+
+  /* vector with order terms are dropped in (first to last) */
+  arma::uvec drop_order;
+
+  /* map from index at which the term is added to the node object */
+  std::map<unsigned, const cov_node*> order_add;
+
+  /* first element is R^2s and second element is GCVs  */
+  std::array<arma::vec, 2> backward_stats;
 };
 
 /* Runs Multivariate Adaptive Regression Spline algorithm.
@@ -56,7 +77,7 @@ struct omua_res {
  *   penalty: d parameter in Friedman (1991) used in cost complexity function.
  *   trace: integer where zero yields no information and higher values yields
  *   more information.
- *   thresh: threshold for minimum R^2.
+ *   thresh: threshold for minimum R^2 improvment.
  */
 omua_res omua
   (const arma::mat &X, const arma::vec &Y, const arma::vec &W,

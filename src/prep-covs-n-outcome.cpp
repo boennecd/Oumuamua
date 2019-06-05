@@ -10,12 +10,14 @@ XY_dat::XY_dat(const arma::vec &y, const arma::mat &X, arma::vec w):
 
   /* compute weighted versions */
   w.for_each( [](arma::mat::elem_type& val) { val = std::sqrt(val); } );
-  c_sqw_y = y % w;
-  s_sqw_X = X;
-  s_sqw_X.each_col() %= w;
+  c_W_y = y % w;
 
   /* compute weighted and centered versions */
-  c_sqw_y  -= arma::mean(c_sqw_y);
-  X_scales = arma::stddev(s_sqw_X, 0L, 0L);
-  s_sqw_X.each_row() /= X_scales;
+  y_mean = arma::mean(c_W_y);
+  c_W_y  -= y_mean;
+  sc_X = X;
+  X_scales = arma::stddev(sc_X, 0L, 0L);
+  X_means = arma::mean(sc_X, 0);
+  sc_X.each_row() -= X_means;
+  sc_X.each_row() /= X_scales;
 }

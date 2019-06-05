@@ -57,6 +57,25 @@ public:
   unsigned n_elem() const {
     return z.n_elem;
   }
+
+  /* removes a variable from the equation */
+  normal_equation remove(const unsigned idx) const {
+#ifdef OUMU_DEBUG
+    if(idx >= C.get_decomp().n_cols)
+      throw std::invalid_argument(
+          "'normal_equation::remove': index out for range");
+#endif
+    normal_equation out;
+    out.C = C.remove(idx);
+    out.z.resize(z.n_elem - 1L);
+          double *o = out.z.begin();
+    const double *v = z.cbegin();
+    for(unsigned j = 0; j < z.n_elem; ++j, ++v)
+      if(j != idx)
+        *o++ = *v;
+
+    return out;
+  }
 };
 
 #endif

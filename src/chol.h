@@ -27,6 +27,9 @@ public:
   const arma::mat& get_decomp() const {
     return chol_;
   }
+
+  /* removes a column and row from the Cholesky decomposition */
+  chol_decomp remove(const unsigned) const;
 };
 
 #endif

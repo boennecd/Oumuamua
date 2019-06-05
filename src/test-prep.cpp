@@ -15,12 +15,11 @@ context("Testing 'XY_dat'") {
      dput_2_cpp(y)
      dput_2_cpp(w)
 
-     wy <- sqrt(w) * y
-     wX <- sqrt(w) * X
-
-     dput_2_cpp(cwy <- scale(wy, scale = FALSE))
-     dput_2_cpp(sds <- apply(wX, 2, sd))
-     dput_2_cpp(cwX <- t(t(wX) / sds))
+     wy <- w * y
+     dput_2_cpp(scale(wy, scale = FALSE))
+     dput_2_cpp(X <- scale(X))
+     dput_2_cpp(attr(X, "scaled:center"))
+     dput_2_cpp(attr(X, "scaled:scale"))
      */
     const arma::mat X = create_mat<6L, 2>(
       { 0.71, 0.58, -0.53, 2.18, 1.42, -0.2, 0.57, 0.64, -0.67, 1.82, 0.47, 0.61 });
@@ -35,14 +34,15 @@ context("Testing 'XY_dat'") {
     std::array<double, 6L> ey
     { -0.447895756572054, 0.800968442411011, -0.022217474297753, 0.0882200981778267, -1.18350053993536, 0.764425230216327 };
     std::array<double, 12L> eX
-    {  0.933278966045799, 0.684512889809548, -0.597148312278801, 2.087364325492, 1.42352750734941, -0.203983994873437, 0.935856585728138, 0.943441393465553, -0.942893101410305, 2.17667940011148, 0.588513857054404, 0.777100606995665  };
+    {  0.0165906345730231, -0.112816315096557, -1.2177525776599, 1.47988460391366, 0.723351667383809, -0.88925801311404, -0.00422209362233656, 0.0844418724467292, -1.5748409211315, 1.57906301475384, -0.13088490229243, 0.046443029845701 };
 
-    expect_true(is_all_aprx_equal(XY.s_sqw_X, eX));
-    expect_true(is_all_aprx_equal(XY.c_sqw_y, ey));
+    expect_true(is_all_aprx_equal(XY.sc_X, eX));
+    expect_true(is_all_aprx_equal(XY.c_W_y, ey));
 
-    std::array<double, 2L> scales { 0.753112591273097, 0.602946241969155 };
-
+    std::array<double, 2L> scales { 1.00458283215804, 0.78949773062794 };
     expect_true(is_all_aprx_equal(XY.X_scales, scales));
+    std::array<double, 2L> mean { 0.693333333333333, 0.573333333333333 };
+    expect_true(is_all_aprx_equal(XY.X_means, mean));
   }
 }
 #endif

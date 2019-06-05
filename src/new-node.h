@@ -12,10 +12,12 @@ struct new_node_res {
   double knot = std::numeric_limits<double>::quiet_NaN();
 };
 
-inline double get_min_se_less_var(const normal_equation &eq){
+inline double get_min_se_less_var
+  (const normal_equation &eq, const double lambda){
   if(eq.n_elem() == 0L)
     return 0.;
-  return -arma::dot(eq.get_coef(), eq.get_rhs());
+  const arma::vec coef = eq.get_coef();
+  return -arma::dot(coef, eq.get_rhs() + lambda * coef);
 }
 
 /* Find best knot position with smallest squared error given a new predictor

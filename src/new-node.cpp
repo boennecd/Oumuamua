@@ -172,7 +172,7 @@ new_node_res get_new_node
     /* update solution */
     normal_equation new_problem = problem_w_lin_term;
     new_problem.update(V, k);
-    const double se = get_min_se_less_var(new_problem);
+    const double se = get_min_se_less_var(new_problem, lambda);
     if(se < out.min_se_less_var){
       out.min_se_less_var = se;
       out.knot = *knot;

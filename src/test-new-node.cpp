@@ -134,7 +134,7 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
         gram.diag() += lambda;
         const arma::vec c = X.t() * y_cen,
                      coef = arma::solve(gram, c);
-        const double se = - arma::dot(coef, c);
+        const double se = - arma::dot(coef, c + lambda * coef);
         if(se < out.min_se_less_var){
           out.min_se_less_var = se;
           out.knot = k;
@@ -198,7 +198,7 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
         gram.diag() += lambda;
         const arma::vec c = X.t() * y_cen,
           coef = arma::solve(gram, c);
-        const double se = - arma::dot(coef, c);
+        const double se = - arma::dot(coef, c + lambda * coef);
         if(se < out.min_se_less_var){
           out.min_se_less_var = se;
           out.knot = k;
