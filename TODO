@@ -7,3 +7,4 @@ compare with mda and earth package
 implement different knot strategy
 find heuristic way to scale L2 penalty
 implement thresholding
+only add one hinge when there is already a pair of hinge functions

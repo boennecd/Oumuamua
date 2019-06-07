@@ -26,9 +26,11 @@ test_that("Get the same with additive model", {
   yhat <- drop(fit$X %*% coef(fit))
   expect_equal(yhat, predict(fit, newdata = dat))
   expect_equal(yhat[1:10], predict(fit, newdata = dat[1:10, ]))
+  expect_known_value(yhat, "additive-plain-yhat.RDS")
 
   # test output
-  expect_true(FALSE)
+  expect_s3_class(fit, "oumua")
+  expect_known_value(fit$coefficients, "additive-plain-coef.RDS")
 
   #####
   # with weights

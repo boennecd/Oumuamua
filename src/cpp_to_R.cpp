@@ -3,6 +3,7 @@
 #include "get-design.h"
 #include <functional>
 #include <memory>
+#include "profile.h"
 
 using Rcpp::List;
 using Rcpp::Named;
@@ -13,6 +14,10 @@ Rcpp::List omua_to_R
    const double lambda, const unsigned endspan, const unsigned minspan,
    const unsigned degree, const unsigned nk, const double penalty,
    const unsigned trace, const double thresh){
+#ifdef OUMU_PROF
+  profiler profiler("omua_to_R");
+#endif
+
   auto comp_out = omua(
     X, Y, W, lambda, endspan, minspan, degree, nk, penalty, trace, thresh);
 
