@@ -546,34 +546,49 @@ omua_res omua
 
   /* backward pass */
   arma::uvec &drop_order = out.drop_order;
+  arma::vec &R2sq = out.backward_stats[0], &GCVs = out.backward_stats[1];
   std::vector<arma::vec> &coefs = out.coefs;
   {
     if(trace > 0)
       Oout << "Running backward pass\n";
 
     drop_order.set_size(n_terms);
+    R2sq.set_size(n_terms);
+    GCVs.set_size(n_terms);
+
+    /* normal equation which we will remove equations from */
     normal_equation working_model = eq;
-    unsigned i = 0;
+
+    /* remaning indices */
     std::vector<unsigned> remaning(n_terms);
     std::iota(remaning.begin(), remaning.end(), 0);
+
     const unsigned n_terms_dummy = 0L;
     struct gcv gcv_comp { dN, Y_var, penalty, n_terms_dummy };
+    auto get_gcv = [&](const normal_equation &mod){
+      return gcv_comp(get_min_se_less_var(mod, dat.lambda), mod.n_elem());
+    };
+
+    /* set values with all terms */
     coefs.reserve(n_terms);
     coefs.emplace_back(working_model.get_coef());
+    {
+      auto stats = get_gcv(working_model);
+      R2sq.at(0) = stats.Rsq;
+      GCVs.at(0) = stats.gcv;
+    }
 
+    unsigned i = 0;
     while(working_model.n_elem() > 0){
       if(working_model.n_elem() == 1L){
         drop_order[i] = remaning[0];
         break;
       }
 
-      /* remove equation from normal equation and find the one with the
+      /* remove equations from normal equation and find the one with the
        * lowest GCV */
       double min_gcv = std::numeric_limits<double>::infinity();
       unsigned idx_to_drop = 0L;
-      auto get_gcv = [&](const normal_equation &mod){
-        return gcv_comp(get_min_se_less_var(mod, dat.lambda), mod.n_elem());
-      };
 #ifdef OUMU_DEBUG
       gcv::gcv_output max_stats {
         std::numeric_limits<double>::quiet_NaN(),
@@ -583,9 +598,23 @@ omua_res omua
       for(unsigned j = 0; j < working_model.n_elem(); ++j){
         normal_equation one_less = working_model.remove(j);
         auto stats = get_gcv(one_less);
+        if(trace > 1){
+          OPRINTF("j, term, GCV: %4d %4d %20.5f\n", j, remaning[j], stats.gcv);
+          arma::vec t1(remaning.size()), t2 =  one_less.get_coef();
+          const double *x = t2.begin();
+          for(unsigned i = 0; i < remaning.size(); ++i)
+            if(i != j)
+              t1[i] = *x++;
+            else
+              t1[i] = 0.;
+          Oout << "Coef: " << t1.t();
+
+        }
         if(stats.gcv < min_gcv){
           min_gcv = stats.gcv;
+#ifdef OUMU_DEBUG
           max_stats = stats;
+#endif
           idx_to_drop = j;
         }
       }
@@ -595,15 +624,22 @@ omua_res omua
       drop_order[i++] = remaning[idx_to_drop];
       remaning.erase(remaning.begin() + idx_to_drop);
       auto new_stats = get_gcv(working_model);
+
       coefs.emplace_back(working_model.get_coef());
+      R2sq.at(i) = new_stats.Rsq;
+      GCVs.at(i) = new_stats.gcv;
+
 #ifdef OUMU_DEBUG
       if(max_stats.gcv - new_stats.gcv  != 0)
         throw std::runtime_error("GCV do not match after removal");
 #endif
       if(trace > 0){
-        OPRINTF("Dropped term %4d: GCV, R^2, # coef: %14.4f, %14.4f, %4d\n",
+        OPRINTF("Dropped term %4d: GCV, R^2, # coef: %14.4f, %14.4f, %4d\nRemaining terms indices ",
                 drop_order[i - 1L], new_stats.gcv, new_stats.Rsq,
                 working_model.n_elem());
+        for(auto i : remaning)
+          OPRINTF("%4d ", i);
+        Oout << "\n";
         print_knot_info(
           *order_add.find(drop_order[i - 1])->second,
           out.X_scales, out.X_means);

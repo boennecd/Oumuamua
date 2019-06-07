@@ -2,6 +2,7 @@
 #define PREP_H
 #include "arma.h"
 
+/* TODO: a bit overkill? */
 struct XY_dat {
   /* class to hold covariates and outcomes */
 
@@ -23,5 +24,7 @@ struct XY_dat {
    */
   XY_dat(const arma::vec&, const arma::mat&, arma::vec);
 };
+
+void standardize(arma::mat&, const arma::rowvec&, const arma::rowvec&);
 
 #endif

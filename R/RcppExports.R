@@ -2,6 +2,10 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 omua_to_R <- function(X, Y, W, lambda, endspan, minspan, degree, nk, penalty, trace, thresh) {
-    invisible(.Call(`_Oumuamua_omua_to_R`, X, Y, W, lambda, endspan, minspan, degree, nk, penalty, trace, thresh))
+    .Call(`_Oumuamua_omua_to_R`, X, Y, W, lambda, endspan, minspan, degree, nk, penalty, trace, thresh)
+}
+
+get_design_map_from_R <- function(root_childrens, X, X_scales, X_means, drop_order, n_vars) {
+    .Call(`_Oumuamua_get_design_map_from_R`, root_childrens, X, X_scales, X_means, drop_order, n_vars)
 }
 

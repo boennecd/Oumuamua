@@ -1,5 +1,11 @@
 #include "prep-covs-n-outcome.h"
 
+void standardize(
+    arma::mat &X, const arma::rowvec &X_means, const arma::rowvec &X_scales){
+  X.each_row() -= X_means;
+  X.each_row() /= X_scales;
+}
+
 XY_dat::XY_dat(const arma::vec &y, const arma::mat &X, arma::vec w):
   y(y), X(X) {
 #ifdef OUMU_DEBUG
@@ -9,7 +15,7 @@ XY_dat::XY_dat(const arma::vec &y, const arma::mat &X, arma::vec w):
 #endif
 
   /* compute weighted versions */
-  w.for_each( [](arma::mat::elem_type& val) { val = std::sqrt(val); } );
+  w.for_each([](arma::mat::elem_type& val) { val = std::sqrt(val); });
   c_W_y = y % w;
 
   /* compute weighted and centered versions */
@@ -18,6 +24,5 @@ XY_dat::XY_dat(const arma::vec &y, const arma::mat &X, arma::vec w):
   sc_X = X;
   X_scales = arma::stddev(sc_X, 0L, 0L);
   X_means = arma::mean(sc_X, 0);
-  sc_X.each_row() -= X_means;
-  sc_X.each_row() /= X_scales;
+  standardize(sc_X, X_means, X_scales);
 }

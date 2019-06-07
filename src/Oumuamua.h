@@ -15,7 +15,7 @@ public:
   const unsigned cov_index;
   /* knot position. NaN means no hinge functions (just the linear term) */
   const double knot;
-  const bool has_knots;
+  const bool has_knot;
   /* sign for whether it is max(x - knot) or max(knot - x) */
   const double sign;
   /* depth starting from zero at root's children */
@@ -31,7 +31,7 @@ public:
     (const unsigned cov_index, const double knot, const double sign,
      const unsigned depth, const unsigned add_idx,
      const cov_node * const parent):
-    cov_index(cov_index), knot(knot), has_knots(!std::isnan(knot)),
+    cov_index(cov_index), knot(knot), has_knot(!std::isnan(knot)),
     sign(sign < 0. ? -1. : 1.), depth(depth), add_idx(add_idx), parent(parent)
     { }
 

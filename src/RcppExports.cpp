@@ -7,9 +7,10 @@
 using namespace Rcpp;
 
 // omua_to_R
-void omua_to_R(const arma::mat& X, const arma::vec& Y, const arma::vec& W, const double lambda, const unsigned endspan, const unsigned minspan, const unsigned degree, const unsigned nk, const double penalty, const unsigned trace, const double thresh);
+Rcpp::List omua_to_R(const arma::mat& X, const arma::vec& Y, const arma::vec& W, const double lambda, const unsigned endspan, const unsigned minspan, const unsigned degree, const unsigned nk, const double penalty, const unsigned trace, const double thresh);
 RcppExport SEXP _Oumuamua_omua_to_R(SEXP XSEXP, SEXP YSEXP, SEXP WSEXP, SEXP lambdaSEXP, SEXP endspanSEXP, SEXP minspanSEXP, SEXP degreeSEXP, SEXP nkSEXP, SEXP penaltySEXP, SEXP traceSEXP, SEXP threshSEXP) {
 BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type Y(YSEXP);
@@ -22,8 +23,24 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type penalty(penaltySEXP);
     Rcpp::traits::input_parameter< const unsigned >::type trace(traceSEXP);
     Rcpp::traits::input_parameter< const double >::type thresh(threshSEXP);
-    omua_to_R(X, Y, W, lambda, endspan, minspan, degree, nk, penalty, trace, thresh);
-    return R_NilValue;
+    rcpp_result_gen = Rcpp::wrap(omua_to_R(X, Y, W, lambda, endspan, minspan, degree, nk, penalty, trace, thresh));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_design_map_from_R
+arma::mat get_design_map_from_R(const List root_childrens, const arma::mat& X, const arma::vec& X_scales, const arma::vec& X_means, const arma::uvec& drop_order, const arma::uword n_vars);
+RcppExport SEXP _Oumuamua_get_design_map_from_R(SEXP root_childrensSEXP, SEXP XSEXP, SEXP X_scalesSEXP, SEXP X_meansSEXP, SEXP drop_orderSEXP, SEXP n_varsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const List >::type root_childrens(root_childrensSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type X_scales(X_scalesSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type X_means(X_meansSEXP);
+    Rcpp::traits::input_parameter< const arma::uvec& >::type drop_order(drop_orderSEXP);
+    Rcpp::traits::input_parameter< const arma::uword >::type n_vars(n_varsSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_design_map_from_R(root_childrens, X, X_scales, X_means, drop_order, n_vars));
+    return rcpp_result_gen;
 END_RCPP
 }
 
@@ -31,6 +48,7 @@ RcppExport SEXP run_testthat_tests();
 
 static const R_CallMethodDef CallEntries[] = {
     {"_Oumuamua_omua_to_R", (DL_FUNC) &_Oumuamua_omua_to_R, 11},
+    {"_Oumuamua_get_design_map_from_R", (DL_FUNC) &_Oumuamua_get_design_map_from_R, 6},
     {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 0},
     {NULL, NULL, 0}
 };
