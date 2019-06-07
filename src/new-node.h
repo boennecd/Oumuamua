@@ -42,11 +42,12 @@ inline double get_min_se_less_var
  *   knots: interior knot positions to consider.
  *   lambda: L2 penalty on coefficients.
  *   N: total number of observations (including non-active observations).
+ *   one_hinge: true if one hinge should be added.
  */
 new_node_res get_new_node
   (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
    const arma::vec &parent, const arma::mat &B, const arma::vec &knots,
-   const double lambda, const unsigned N);
+   const double lambda, const unsigned N, const bool one_hinge);
 
 struct add_linear_term_res {
   /* updated normal equation with covariate times parent */

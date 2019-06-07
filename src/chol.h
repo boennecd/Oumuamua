@@ -22,10 +22,29 @@ public:
    *
    * given V = | V_1^T V_2^T |^T
    */
-  void update(const arma::mat&);
+  void update(const arma::mat &V){
+    resize(V.n_rows);
+    update_sub(V);
+  }
+
+  void update_sub(const arma::mat&);
 
   const arma::mat& get_decomp() const {
     return chol_;
+  }
+
+  void resize(const unsigned new_dim){
+    if(new_dim < 1){
+      chol_.set_size(0, 0);
+      return;
+    }
+
+    arma::mat new_mat(new_dim, new_dim, arma::fill::zeros);
+    if(chol_.n_cols > 0) {
+      const arma::uword s = std::min(new_dim - 1, chol_.n_cols - 1);
+      new_mat.submat(0, 0, s, s) = chol_.submat(0, 0, s, s);
+    }
+    chol_ = std::move(new_mat);
   }
 
   /* removes a column and row from the Cholesky decomposition */

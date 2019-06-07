@@ -1,6 +1,11 @@
 #include "new-node.h"
+#include "blas-lapack.h"
 
 using std::to_string;
+
+static constexpr char C_T = 'T';
+static constexpr double D_ONE = 1;
+static constexpr int I_ONE = 1;
 
 inline arma::span get_sold(const bool fresh, const unsigned p){
   return fresh ? arma::span() : arma::span(0L, p - 1L);
@@ -83,8 +88,9 @@ add_linear_term_res add_linear_term
 new_node_res get_new_node
   (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
    const arma::vec &parent, const arma::mat &B, const arma::vec &knots,
-   const double lambda, const unsigned N){
-  const arma::uword n = x.n_elem, p = B.n_cols, p1 = p + 1;
+   const double lambda, const unsigned N, const bool one_hinge){
+  const arma::uword n = x.n_elem, p = B.n_cols,
+    idx_last_term = p + !one_hinge;
   const bool fresh = p < 1L;
   const double dN = N;
 
@@ -92,19 +98,26 @@ new_node_res get_new_node
     old_problem, x, y, parent, B, lambda, N, "'get_new_node': ",
     &knots, true);
 
-  /* Handle the first part for the term with the idenity function */
-  const auto lin_term_obj = add_linear_term
-    (old_problem, x, y, parent, B, lambda, N);
-  const arma::vec &x_cen = lin_term_obj.x_cen;
-  const normal_equation &problem_w_lin_term = lin_term_obj.new_eq;
+  arma::vec x_cen;
+  normal_equation problem_to_update;
+  if(!one_hinge){
+    /* Handle the first part for the term with the idenity function */
+    const auto lin_term_obj = add_linear_term
+      (old_problem, x, y, parent, B, lambda, N);
+    x_cen = lin_term_obj.x_cen;
+    problem_to_update = lin_term_obj.new_eq;
+
+  } else
+    problem_to_update = old_problem;
+  problem_to_update.resize(problem_to_update.n_elem() + 1);
 
   /* prep for going through knot */
   const arma::span sold = get_sold(fresh, p);
-  arma::mat V(p + 2L, 1L, arma::fill::zeros);
+  arma::mat V(p + 1L + !one_hinge, 1L, arma::fill::zeros);
   arma::vec k(1L, arma::fill::zeros);
 
   /* handle penalty term for hinge function */
-  V(p1, 0L) = lambda;
+  V(idx_last_term, 0L) = lambda;
 
   /* loop over knots and find the one with the lowest squared error */
   new_node_res out;
@@ -113,7 +126,14 @@ new_node_res get_new_node
    * active from the previous iteration */
   arma::uword active_end = 0L, new_active_end = 0L;
   const arma::vec parent_sq = arma::square(parent);
+
+  /* quantites in equation (52) in Friedman (1991) */
+  double grad_term_old = 0., V_x_h = 0., parent_sq_h = 0., sum_parent_sq = 0.,
+    su = 0., sum_parent = 0.;
+  arma::mat V_old_h(p, 1, arma::fill::zeros);
+
   /* TODO: replace with BLAS calls? */
+  const int n_B = B.n_cols, lda_B = B.n_rows;
   for(const double *knot = knots.begin(); knot != knots.end();
       knot_old = *knot, ++knot, active_end = new_active_end){
     /* find new_end */
@@ -124,55 +144,64 @@ new_node_res get_new_node
     }
 
     /* we need to compute two squares of sums */
-    double su = 0., sl = 0.;
+    double sl = 0.;
+    const arma::span new_active(active_end, new_active_end - 1L);
 
     /* make update for *new* active observations */
     {
-      const arma::span new_active(active_end, new_active_end - 1L);
       const arma::vec par_x_less_knot =
         parent(new_active) % (x(new_active) - *knot);
       k.at(0L) += arma::dot(y(new_active), par_x_less_knot);
 
-      if(!fresh)
-        V.rows(sold) +=
-          B.rows(new_active).t() * par_x_less_knot;
+      if(!fresh){
+        const int m = new_active.b - new_active.a + 1;
+        F77_CALL(dgemv)(
+          &C_T, &m, &n_B, &D_ONE, B.memptr() + new_active.a, &lda_B,
+          par_x_less_knot.memptr(), &I_ONE, &D_ONE, V.memptr(), &I_ONE);
+      }
 
-      V(p, 0L) += arma::dot(x_cen(new_active), par_x_less_knot);
+      if(!one_hinge)
+        V(p, 0L) += arma::dot(x_cen(new_active), par_x_less_knot);
 
-      V(p1, 0L) +=
+      V(idx_last_term, 0L) +=
         arma::dot(par_x_less_knot, par_x_less_knot);
 
       sl += arma::sum(par_x_less_knot);
     }
 
     /* make update on active observations */
-    if(active_end > 0){
-      const double knot_diff = knot_old - *knot;
-      const arma::span active(0L, active_end - 1L);
-      k.at(0L) += knot_diff * arma::dot(y(active), parent(active));
+    const double knot_diff = knot_old - *knot;
+    k.at(0L) += knot_diff * grad_term_old;
+    if(!fresh)
+      V.rows(sold) += knot_diff * V_old_h;
+    if(!one_hinge)
+      V(p, 0L) += knot_diff * V_x_h;
+    sl += su + sum_parent * knot_diff;
+    V(idx_last_term, 0L) +=
+      knot_diff * (2. * parent_sq_h - sum_parent_sq * (knot_old + *knot)) +
+      (su * su - sl * sl) / dN;
 
-      if(!fresh)
-        V.rows(sold) +=
-          knot_diff * (B.rows(active).t() *  parent(active));
-
-      V(p, 0L) += knot_diff * arma::dot(x_cen(active), parent(active));
-      V(p1, 0L) +=
-        knot_diff *
-        arma::dot(parent_sq(active), 2 * x(active) - knot_old - *knot);
-
-      for(unsigned i = 0; i < active_end; ++i){
-        su += parent.at(i) * (x.at(i) - knot_old);
-        sl += parent.at(i) * (x.at(i) - *knot);
-      }
+    /* update intermediaries */
+    grad_term_old += arma::dot(y(new_active), parent(new_active));
+    {
+      const int m = new_active.b - new_active.a + 1;
+      F77_CALL(dgemv)(
+        &C_T, &m, &n_B, &D_ONE, B.memptr() + new_active.a,
+        &lda_B, parent.memptr() + new_active.a, &I_ONE,
+        &D_ONE, V_old_h.memptr(), &I_ONE);
     }
-
-    /* handle two squared sums in lower right entry of Gramian matrix */
-    V(p1, 0L) += (su * su - sl * sl) / dN;
+    if(!one_hinge)
+      V_x_h += arma::dot(x_cen(new_active), parent(new_active));
+    parent_sq_h += arma::dot(parent_sq(new_active), x(new_active));
+    for(unsigned i = new_active.a; i <= new_active.b; ++i){
+      sum_parent    += parent   .at(i);
+      sum_parent_sq += parent_sq.at(i);
+    }
+    su = sl;
 
     /* update solution */
-    normal_equation new_problem = problem_w_lin_term;
-    new_problem.update(V, k);
-    const double se = get_min_se_less_var(new_problem, lambda);
+    problem_to_update.update_sub(V, k);
+    const double se = get_min_se_less_var(problem_to_update, lambda);
     if(se < out.min_se_less_var){
       out.min_se_less_var = se;
       out.knot = *knot;

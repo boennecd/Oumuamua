@@ -74,9 +74,10 @@ inline knot_res get_knots(const arma::vec &x, const problem_data &dat){
 
 namespace {
   /* result type. 'all_equal' means no variation for the active covariates,
-   * 'only_linear' means only a linear term should be included, and 'hinge'
-   * means that two hinge functions should be included. */
-  enum res_type { all_equal, only_linear, hinge };
+   * 'only_linear' means only a linear term should be included, 'one_hinge'
+   * implies only one hinge function (if two have already been added for the
+   * variable), and 'hinge' means that two hinge functions should be included. */
+  enum res_type { all_equal, only_linear, one_hinge, hinge };
 
   struct worker_res {
     res_type res = all_equal;
@@ -102,6 +103,8 @@ namespace {
     const normal_equation &old_eq;
     /* current centered design matrix */
     const arma::mat &cur_design_mat;
+    /* current root nodes */
+    std::vector<std::unique_ptr<cov_node> > &root_childrens;
 
     worker_res operator()() const {
       worker_res out;
@@ -135,9 +138,17 @@ namespace {
 
       /* find best knot position */
       {
+        auto cov_idx_ptr = std::find_if(
+          root_childrens.begin(), root_childrens.end(),
+          [&](const std::unique_ptr<cov_node> &node){
+            return node->cov_index == cov_index;
+          });
+        const bool use_one_hinge = cov_idx_ptr != root_childrens.end();
+
         auto best_knot = get_new_node
-          (old_eq, x, y, parent, B, knots, dat.lambda, dat.N);
-        out.res = hinge;
+          (old_eq, x, y, parent, B, knots, dat.lambda, dat.N,
+           use_one_hinge);
+        out.res = use_one_hinge ? one_hinge : hinge;
         out.min_se_less_var = best_knot.min_se_less_var;
         out.knot = best_knot.knot;
       }
@@ -209,9 +220,17 @@ namespace {
 
       /* find best knot position */
       {
+        const auto &children = parent_node->children;
+        const bool use_one_hinge = std::find_if(
+          children.begin(), children.end(),
+          [&](const std::unique_ptr<cov_node> &node){
+            return node->cov_index != cov_index;
+          }) != children.end();
+
         auto best_knot = get_new_node
-          (old_eq, x, y, parent_use, B, knots, dat.lambda, dat.N);
-        out.res = hinge;
+          (old_eq, x, y, parent_use, B, knots, dat.lambda, dat.N,
+           use_one_hinge);
+        out.res = use_one_hinge ? one_hinge : hinge;
         out.min_se_less_var = best_knot.min_se_less_var;
         out.knot = best_knot.knot;
       }
@@ -400,7 +419,8 @@ omua_res omua
       /* check root children */
       results.clear();
       for(auto i : active_root_covs){
-        root_worker task { dat, i, root_parent, eq, cur_design_mat };
+        root_worker task { dat, i, root_parent, eq, cur_design_mat,
+                           root_childrens };
         results.push_back(task());
       }
 
@@ -441,7 +461,7 @@ omua_res omua
       if(!is_root_child)
         throw std::runtime_error("not implemented");
 
-      if(best->res == hinge){
+      if(best->res == hinge or best->res == one_hinge){
         auto add_root_note = [&](const double sign){
           const unsigned cov_index = best->cov_index,
                          desg_indx = n_terms++;
@@ -475,7 +495,8 @@ omua_res omua
           eq.update(V, k);
         };
 
-        add_root_note(-1.);
+        if(best->res == hinge)
+          add_root_note(-1.);
         add_root_note(1.);
 
       } else if(best->res == only_linear){
@@ -513,8 +534,8 @@ omua_res omua
 
       auto stats = gcv_comp(get_min_se_less_var(eq, dat.lambda), 0L);
       if(trace > 0){
-        OPRINTF("Ended iteration %4d: GCV, R^2: %14.4f, %14.4f\n",
-                it, stats.gcv, stats.Rsq);
+        OPRINTF("Ended iteration %4d: GCV, R^2, # terms: %14.4f, %14.4f, %4d\n",
+                it, stats.gcv, stats.Rsq, eq.n_elem());
         print_knot_info(*best, out.X_scales, out.X_means);
       }
 

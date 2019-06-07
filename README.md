@@ -64,16 +64,16 @@ lapply(res, function(x) apply(x, 1, function(z)
   c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
 #> $`100`
 #>                earth   oumua
-#> mean           3.904 1.41452
-#> standard error 1.983 0.01497
+#> mean           3.904 1.42322
+#> standard error 1.983 0.01771
 #> 
 #> $`200`
 #>                earth    oumua
-#> mean           8.570 1.189449
-#> standard error 7.266 0.006016
+#> mean           8.570 1.180084
+#> standard error 7.266 0.005963
 #> 
 #> $`500`
 #>                   earth    oumua
-#> mean           1.088882 1.061979
-#> standard error 0.007348 0.002351
+#> mean           1.088882 1.060981
+#> standard error 0.007348 0.002074
 ```

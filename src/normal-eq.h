@@ -30,20 +30,32 @@ public:
    *   | V_1^T V_2 | | x_2 |   | k |
    */
   void update(const arma::mat &V, const arma::vec &k) {
-    const unsigned p = V.n_rows, n = C.get_decomp().n_rows;
 #ifdef OUMU_DEBUG
+    const unsigned n = C.get_decomp().n_rows;
     if(V.n_cols != k.n_elem or V.n_rows <= n or V.n_rows - n != k.n_elem)
       throw std::invalid_argument("Invalid 'V' or 'k' in 'normal_equation::update'");
 #endif
-    {
-      const arma::span sold(0L, n - 1L), snew(n, p - 1L);
-      arma::vec z_new(p);
-      if(n > 0L)
-        z_new(sold) = z;
-      z_new(snew) = k;
-      z = std::move(z_new);
-    }
-    C.update(V);
+    resize(V.n_rows);
+    update_sub(V, k);
+  }
+
+  /* same as above but updates last p parts */
+  void update_sub(const arma::mat &V, const arma::vec &k){
+#ifdef OUMU_DEBUG
+    if(V.n_cols != k.n_elem)
+      throw std::invalid_argument("Invalid 'k' in 'normal_equation::update_sub'");
+    if(V.n_rows != n_elem())
+      throw std::invalid_argument(
+          "Invalid 'V' in 'normal_equation::update_sub' (" +
+            std::to_string(V.n_rows) + ", " + std::to_string(n_elem()) + ")");
+#endif
+    z.subvec(z.n_elem - V.n_cols, z.n_elem - 1) = k;
+    C.update_sub(V);
+  }
+
+  void resize(const unsigned new_dim){
+    z.reshape(new_dim, 1);
+    C.resize(new_dim);
   }
 
   arma::vec get_coef() const {

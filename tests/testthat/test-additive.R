@@ -30,7 +30,8 @@ test_that("Get the same with additive model", {
 
   # test output
   expect_s3_class(fit, "oumua")
-  expect_known_value(fit$coefficients, "additive-plain-coef.RDS")
+  expect_known_value(fit[
+    c("coefficients", "backward_stats")], "additive-plain-coef.RDS")
 
   #####
   # with weights

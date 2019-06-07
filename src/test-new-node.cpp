@@ -165,7 +165,7 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
       arma::mat B(N, 0L);
       normal_equation eq;
 
-      auto res = get_new_node(eq, x, y, parent, B, knots, lambda, N);
+      auto res = get_new_node(eq, x, y, parent, B, knots, lambda, N, false);
 
       expect_true(
         std::abs(brute.min_se_less_var - res.min_se_less_var) < 1e-8);
@@ -259,7 +259,96 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
       B_cen = B_cen.rows(idx.order());
 
       auto res = get_new_node(eq, x_active, y_active, parent_active,
-                              B_cen, knots, lambda, N);
+                              B_cen, knots, lambda, N, false);
+
+      expect_true(
+        std::abs(brute.min_se_less_var - res.min_se_less_var) < 1e-8);
+      expect_true(brute.knot == res.knot);
+    }
+  }
+
+  test_that("'get_new_node' gives correct result with one hinge") {
+    auto brute_solve = []
+    (const arma::vec &x, const arma::vec &y_cen, const arma::vec &knots,
+     const double lambda, const arma::vec &parent, const arma::mat &B_cen){
+      const arma::mat B_base = ([&]{
+        arma::mat out(B_cen.n_rows, 3L);
+        out.cols(0, 1) = B_cen;
+        return out;
+      })();
+
+      new_node_res out;
+      for(auto k : knots){
+        arma::mat X = B_base;
+        X.col(2) = x;
+        set_hinge(X, 2L, 1., k);
+        X.col(2) %= parent;
+        arma::mat X_cen = X;
+        center_cov(X_cen, 2L);
+
+        arma::mat gram = X_cen.t() * X_cen;
+        gram.diag() += lambda;
+        const arma::vec c = X.t() * y_cen,
+          coef = arma::solve(gram, c);
+        const double se = - arma::dot(coef, c + lambda * coef);
+        if(se < out.min_se_less_var){
+          out.min_se_less_var = se;
+          out.knot = k;
+        }
+      }
+
+      return out;
+    };
+
+    for(unsigned i = 0; i < 5L; ++i){
+      /* get previous design matrix, and centered design matrix */
+      auto XY = get_data();
+      const double parent_knot = 1.;
+      arma::mat X = std::move(XY.first), B(X.n_rows, 2);
+      B.col(0) = X.col(0);
+      B.col(1) = X.col(0);
+      set_hinge(B, 0, 1, parent_knot);
+      set_hinge(B, 1, -1, parent_knot);
+      const arma::uword parent_idx = 0;
+
+      arma::mat B_cen = B;
+      center_cov(B_cen, 0);
+      center_cov(B_cen, 1);
+
+      /* get outcome*/
+      arma::vec y = std::move(XY.second);
+
+      /* get x, subset that is active, and the knots */
+      arma::vec x_org = X.col(0);
+      sort_keys idx(x_org);
+      arma::vec knots = x_org(idx.order());
+      knots = knots.subvec(1L, knots.n_elem - 2L);
+
+      /* set penalty parameter */
+      double lambda = 10.;
+
+      /* brute force solution */
+      const arma::vec parent(x_org.n_elem, arma::fill::zeros);
+      auto brute = brute_solve(x_org, y, knots, lambda, parent, B_cen);
+
+      /* implementation. First get the old solution */
+      normal_equation eq;
+      {
+        arma::mat gram = B_cen.t() * B_cen;
+        gram.diag() += lambda;
+        arma::vec k = B.t() * y;
+        eq.update(gram, k);
+      }
+
+      /* then get the active observations and call function */
+      const arma::vec
+          x_active = x_org(idx.order()),
+          y_active = y(idx.order()),
+          parent_active = parent(idx.order());
+      B_cen = B_cen.rows(idx.order());
+
+      auto res = get_new_node(eq, x_active, y_active, parent_active,
+                              B_cen, knots, lambda, N, true);
 
       expect_true(
         std::abs(brute.min_se_less_var - res.min_se_less_var) < 1e-8);

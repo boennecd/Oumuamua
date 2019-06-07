@@ -38,6 +38,8 @@ inline knot_res get_all_knots(const arma::vec &x){
     if(*z < old){
       *o++ = *z;
       n_ele++;
+      if(o == out.end())
+        break;
     }
 
   if(n_ele < 2L)

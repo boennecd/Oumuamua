@@ -75,8 +75,3 @@ names(res) <- N
 lapply(res, function(x) apply(x, 1, function(z) 
   c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
 ```
-
-```{r}
-
-```
-

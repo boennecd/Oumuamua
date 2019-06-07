@@ -42,11 +42,11 @@ arma::vec chol_decomp::solve(const arma::vec &x) const {
   return out;
 }
 
-void chol_decomp::update(const arma::mat &V) {
-  const int n = chol_.n_cols, p = V.n_rows;
+void chol_decomp::update_sub(const arma::mat &V){
+  const int p = V.n_rows, n = p - V.n_cols;
 #ifdef OUMU_DEBUG
-  if((n > 0L and p <= n) or (n == 0L and V.n_rows != V.n_cols))
-    throw invalid_argument("dims do not match with 'chol_decomp::update'");
+  if(V.n_rows != chol_.n_rows)
+    throw invalid_argument("dims do not match with 'chol_decomp::update_sub'");
 #endif
 
   if(n == 0L){
@@ -55,23 +55,30 @@ void chol_decomp::update(const arma::mat &V) {
     return;
   }
 
-  arma::mat new_chol(p, p, arma::fill::zeros);
-  const arma::span old_span(0L, n - 1L), new_span(n, p - 1L);
-  new_chol(old_span, old_span) = chol_;
-
   /* update upper right block */
-  new_chol(old_span, new_span) = V.rows(old_span);
+  const arma::span old_span(0L, n - 1L), new_span(n, p - 1L);
+  chol_(old_span, new_span) = V.rows(old_span);
   const int nrhs = p - n;
   F77_CALL(dtrsm)(
-      &C_L, &C_U, &C_T, &C_N, &n, &nrhs, &D_ONE, chol_.begin(), &n,
-      new_chol.colptr(n), &p);
+      &C_L, &C_U, &C_T, &C_N, &n, &nrhs, &D_ONE, chol_.begin(), &p,
+      chol_.colptr(n), &p);
 
   /* update lower right block. TODO: do this inplace */
-  new_chol(new_span, new_span) = arma::trimatu(arma::chol(
-    V.rows(new_span.a, new_span.b) -
-      new_chol(old_span, new_span).t() * new_chol(old_span, new_span)));
+  if(p - n == 1L){
+    chol_(n, n) = V(n, 0);
+    double *xn = chol_.colptr(n) + n;
+    const double *v = chol_.colptr(n);
+    for(int i = 0; i < n; ++i, ++v)
+      *xn -= *v * *v;
+    chol_(n, n) = std::sqrt(chol_(n, n));
 
-  chol_ = std::move(new_chol);
+  } else {
+    chol_(new_span, new_span) = V.rows(new_span.a, new_span.b);
+    chol_(new_span, new_span) -=
+      chol_(old_span, new_span).t() * chol_(old_span, new_span);
+    chol_(new_span, new_span) = arma::chol(chol_(new_span, new_span));
+
+  }
 }
 
 inline void given_zero
