@@ -113,7 +113,7 @@ namespace {
       /* get sorted covariate values and find knots */
       const sort_keys &key = dat.keys[cov_index];
       const arma::vec x = ([&]{
-        arma::vec out = dat.X.col(cov_index);
+        arma::vec out = dat.X.row(cov_index).t();
         out = out(key.order());
         return out;
       })();
@@ -126,7 +126,8 @@ namespace {
       }
 
       const arma::vec y = dat.wY(key.order());
-      const arma::mat B = cur_design_mat.rows(key.order());
+      const arma::mat B = cur_design_mat.cols(key.order());
+
       if(knots.n_unique < 3L or knots.knots.n_elem < 1L){
         /* could be a dummy. Include linear term */
         out.res = only_linear;
@@ -148,6 +149,7 @@ namespace {
         auto best_knot = get_new_node
           (old_eq, x, y, parent, B, knots, dat.lambda, dat.N,
            use_one_hinge);
+
         out.res = use_one_hinge ? one_hinge : hinge;
         out.min_se_less_var = best_knot.min_se_less_var;
         out.knot = best_knot.knot;
@@ -192,7 +194,7 @@ namespace {
       }
 
       const arma::vec x = ([&]{
-        arma::vec out = dat.X.col(cov_index);
+        arma::vec out = dat.X.row(cov_index).t();
         out = out(key.order());
         return out;
       })();
@@ -208,7 +210,7 @@ namespace {
       const arma::vec y = dat.wY(key.order()),
              /* TODO: avoid needing to have a full parent vector? */
              parent_use = parent(key.order());
-      const arma::mat B = cur_design_mat.rows(key.order());
+      const arma::mat B = cur_design_mat.cols(key.order());
       if(knots.n_unique < 3L or knots.knots.n_elem < 1L){
         /* could be a dummy. Include linear term */
         out.res = only_linear;
@@ -370,6 +372,7 @@ omua_res omua
       return out;
     })();
 
+    arma::inplace_trans(dat.sc_X);
     return problem_data
       { std::move(dat.sc_X), std::move(dat.c_W_y), W, std::move(keys),
         endspan, minspan, lambda, X.n_rows };
@@ -381,7 +384,7 @@ omua_res omua
 
   /* vector with active covariates at root node (in-case the user passed
    * a covariate with all-equal values or we have dummies) */
-  std::vector<arma::uword> active_root_covs(dat.X.n_cols);
+  std::vector<arma::uword> active_root_covs(dat.X.n_rows);
   std::iota(active_root_covs.begin(), active_root_covs.end(), 0L);
   const std::vector<arma::uword> root_covs = active_root_covs;
 
@@ -389,7 +392,7 @@ omua_res omua
   const arma::vec root_parent(N, arma::fill::ones);
 
   /* final design matrix */
-  arma::mat design_mat(N, nk, arma::fill::zeros);
+  arma::mat design_mat(nk, N, arma::fill::zeros);
 
   /* variance of Y */
   const double dN = (double)dat.N, Y_var = arma::dot(dat.wY, dat.wY) / dN;
@@ -413,8 +416,13 @@ omua_res omua
         break;
       it++;
 
-      /* current centered design matrix */
-      arma::mat cur_design_mat(design_mat.begin(), dat.N, n_terms, false);
+      /* current centered design matrix.
+       * TODO: avoid this and pass full matrix around */
+      const arma::mat cur_design_mat = ([&]{
+        if(n_terms == 0)
+          return arma::mat(0, dat.N);
+        return (arma::mat)design_mat.rows(0, n_terms - 1);
+      })();
 
       /* check root children */
       results.clear();
@@ -462,42 +470,42 @@ omua_res omua
         throw std::runtime_error("not implemented");
 
       if(best->res == hinge or best->res == one_hinge){
-        auto add_root_note = [&](const double sign){
+        auto add_root_node = [&](const double sign){
           const unsigned cov_index = best->cov_index,
                          desg_indx = n_terms++;
           const double knot = best->knot;
 
           /* update design matrix. Wait with centering to later */
-          design_mat.col(desg_indx) = dat.X.col(cov_index);
-          set_hinge(design_mat, desg_indx, sign, knot);
+          design_mat.row(desg_indx) = dat.X.row(cov_index);
+          set_hinge(design_mat, desg_indx, sign, knot, transpose);
 
           /* add node */
           {
             const arma::uvec active_subset = arma::find(
-              design_mat.col(desg_indx) > 0);
+              design_mat.row(desg_indx) > 0);
             std::vector<arma::uword> active_covs = root_covs;
             remove_first(active_covs, cov_index);
 
             root_childrens.emplace_back(new extended_cov_node(
               cov_index, knot, sign, 0L, desg_indx, nullptr, active_covs,
               dat.keys[cov_index], std::move(active_subset),
-              design_mat.col(desg_indx)));
+              design_mat.row(desg_indx).t()));
           }
 
           /* update normal equation */
           arma::vec k(1);
-          k.at(0) = arma::dot(design_mat.col(desg_indx), dat.wY);
-          center_cov(design_mat, desg_indx);
+          k.at(0) = arma::dot(design_mat.row(desg_indx), dat.wY);
+          center_cov(design_mat, desg_indx, transpose);
           arma::mat V =
-            design_mat.cols(0, desg_indx).t() * design_mat.col(desg_indx);
+            design_mat.rows(0, desg_indx) * design_mat.row(desg_indx).t();
           V(desg_indx, 0) += lambda;
 
           eq.update(V, k);
         };
 
         if(best->res == hinge)
-          add_root_note(-1.);
-        add_root_note(1.);
+          add_root_node(-1.);
+        add_root_node(1.);
 
       } else if(best->res == only_linear){
         const unsigned cov_index = best->cov_index,
@@ -505,27 +513,27 @@ omua_res omua
         const double knot = no_knot;
 
         /* update design matrix. Wait with centering to later */
-        design_mat.col(desg_indx) = dat.X.col(cov_index);
+        design_mat.row(desg_indx) = dat.X.row(cov_index);
 
         /* add node */
         {
           /* just in case the covariate is sparse */
           const arma::uvec active_subset = arma::find(
-            design_mat.col(desg_indx) != 0);
+            design_mat.row(desg_indx) != 0);
           /* remove this index from the root. Dont want to add it again */
           remove_first(active_root_covs, cov_index);
 
           root_childrens.emplace_back(new extended_cov_node(
               cov_index, knot, 0, 0L, desg_indx, nullptr, active_root_covs,
               dat.keys[cov_index], std::move(active_subset),
-              design_mat.col(desg_indx)));
+              design_mat.row(desg_indx).t()));
 
           /* update normal equation */
           arma::vec k(1);
-          k.at(0) = arma::dot(design_mat.col(desg_indx), dat.wY);
-          center_cov(design_mat, desg_indx);
+          k.at(0) = arma::dot(design_mat.row(desg_indx), dat.wY);
+          center_cov(design_mat, desg_indx, transpose);
           arma::mat V =
-            design_mat.cols(0, desg_indx).t() * design_mat.col(desg_indx);
+            design_mat.rows(0, desg_indx) * design_mat.row(desg_indx).t();
           V(desg_indx, 0) += lambda;
           eq.update(V, k);
         }

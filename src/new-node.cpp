@@ -3,7 +3,7 @@
 
 using std::to_string;
 
-static constexpr char C_T = 'T';
+static constexpr char C_N = 'N';
 static constexpr double D_ONE = 1;
 static constexpr int I_ONE = 1;
 
@@ -17,7 +17,7 @@ inline void check_new_node_input
    const unsigned N, const std::string &msg_prefix,
    const arma::vec *knots, const bool check_order){
 #ifdef OUMU_DEBUG
-  const arma::uword n = x.n_elem, p = B.n_cols;
+  const arma::uword n = x.n_elem, p = B.n_rows;
 
   auto invalid_arg = [&](const std::string &msg){
     throw std::invalid_argument(msg_prefix + msg);
@@ -36,7 +36,7 @@ inline void check_new_node_input
   if(old_problem.n_elem() != p)
     invalid_arg("invalid 'old_problem' or 'B' (" +
       to_string(old_problem.n_elem()) + ", " + to_string(p) + ")");
-  if(B.n_rows != n or y.n_elem != n or parent.n_elem != n)
+  if(B.n_cols != n or y.n_elem != n or parent.n_elem != n)
     invalid_arg("invalid 'B', 'parent', or 'y'");
   if(check_order){
       arma::vec tmp = arma::diff(x);
@@ -58,7 +58,7 @@ add_linear_term_res add_linear_term
   (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
    const arma::vec &parent, const arma::mat &B, const double lambda,
    const unsigned N){
-  const arma::uword n = x.n_elem, p = B.n_cols;
+  const arma::uword n = x.n_elem, p = B.n_rows;
   const bool fresh = p < 1L;
   const double dN = N;
 
@@ -73,7 +73,7 @@ add_linear_term_res add_linear_term
   const double x_parent_mean = arma::sum(x_parent) / dN;
   const arma::vec x_cen = x_parent - x_parent_mean;
   if(!fresh)
-    V.rows(sold) = B.t() * x_parent;
+    V.rows(sold) = B * x_parent;
 
   for(auto z : x_cen)
     V(p, 0L) += z * z;
@@ -89,7 +89,7 @@ new_node_res get_new_node
   (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
    const arma::vec &parent, const arma::mat &B, const arma::vec &knots,
    const double lambda, const unsigned N, const bool one_hinge){
-  const arma::uword n = x.n_elem, p = B.n_cols,
+  const arma::uword n = x.n_elem, p = B.n_rows,
     idx_last_term = p + !one_hinge;
   const bool fresh = p < 1L;
   const double dN = N;
@@ -133,7 +133,7 @@ new_node_res get_new_node
   arma::mat V_old_h(p, 1, arma::fill::zeros);
 
   /* TODO: replace with BLAS calls? */
-  const int n_B = B.n_cols, lda_B = B.n_rows;
+  const int m_B = B.n_rows;
   for(const double *knot = knots.begin(); knot != knots.end();
       knot_old = *knot, ++knot, active_end = new_active_end){
     /* find new_end */
@@ -154,9 +154,9 @@ new_node_res get_new_node
       k.at(0L) += arma::dot(y(new_active), par_x_less_knot);
 
       if(!fresh){
-        const int m = new_active.b - new_active.a + 1;
+        const int n = new_active.b - new_active.a + 1;
         F77_CALL(dgemv)(
-          &C_T, &m, &n_B, &D_ONE, B.memptr() + new_active.a, &lda_B,
+          &C_N, &m_B, &n, &D_ONE, B.colptr(new_active.a), &m_B,
           par_x_less_knot.memptr(), &I_ONE, &D_ONE, V.memptr(), &I_ONE);
       }
 
@@ -183,11 +183,11 @@ new_node_res get_new_node
 
     /* update intermediaries */
     grad_term_old += arma::dot(y(new_active), parent(new_active));
-    {
-      const int m = new_active.b - new_active.a + 1;
+    if(!fresh){
+      const int n = new_active.b - new_active.a + 1;
       F77_CALL(dgemv)(
-        &C_T, &m, &n_B, &D_ONE, B.memptr() + new_active.a,
-        &lda_B, parent.memptr() + new_active.a, &I_ONE,
+        &C_N, &m_B, &n, &D_ONE, B.colptr(new_active.a),
+        &m_B, parent.memptr() + new_active.a, &I_ONE,
         &D_ONE, V_old_h.memptr(), &I_ONE);
     }
     if(!one_hinge)
