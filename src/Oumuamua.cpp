@@ -68,8 +68,11 @@ namespace {
 }
 
 /* overload to avoid wrong order of arguments */
-inline knot_res get_knots(const arma::vec &x, const problem_data &dat){
-  return get_knots(x, dat.endspan, dat.minspan);
+inline knot_res get_knots(
+    const arma::vec &x, const problem_data &dat, const arma::uvec &indices){
+  /* TODO: do somethings smarter using that indices yield a sorted vector */
+  const arma::vec x_use = x(indices);
+  return get_knots(x_use, dat.endspan, dat.minspan);
 }
 
 namespace {
@@ -112,12 +115,8 @@ namespace {
 
       /* get sorted covariate values and find knots */
       const sort_keys &key = dat.keys[cov_index];
-      const arma::vec x = ([&]{
-        arma::vec out = dat.X.row(cov_index).t();
-        out = out(key.order());
-        return out;
-      })();
-      auto knots = get_knots(x, dat);
+      const arma::vec x = dat.X.row(cov_index).t();
+      auto knots = get_knots(x, dat, key.order());
 
       if(knots.n_unique < 2L){
         /* no variation in x */
@@ -125,14 +124,14 @@ namespace {
         return out;
       }
 
-      const arma::vec y = dat.wY(key.order());
-      const arma::mat B = cur_design_mat.cols(key.order());
+      const arma::vec &y = dat.wY;
+      const arma::mat &B = cur_design_mat;
 
       if(knots.n_unique < 3L or knots.knots.n_elem < 1L){
         /* could be a dummy. Include linear term */
         out.res = only_linear;
         auto lin_res = add_linear_term
-          (old_eq, x, y, parent, B, dat.lambda, dat.N);
+          (old_eq, x, y, parent, B, dat.lambda, dat.N, key.order());
         out.min_se_less_var = get_min_se_less_var(lin_res.new_eq, dat.lambda);
         return out;
       }
@@ -148,7 +147,7 @@ namespace {
 
         auto best_knot = get_new_node
           (old_eq, x, y, parent, B, knots, dat.lambda, dat.N,
-           use_one_hinge);
+           use_one_hinge, key.order());
 
         out.res = use_one_hinge ? one_hinge : hinge;
         out.min_se_less_var = best_knot.min_se_less_var;
@@ -193,12 +192,8 @@ namespace {
         return out;
       }
 
-      const arma::vec x = ([&]{
-        arma::vec out = dat.X.row(cov_index).t();
-        out = out(key.order());
-        return out;
-      })();
-      auto knots = get_knots(x, dat);
+      const arma::vec x = dat.X.row(cov_index).t();
+      auto knots = get_knots(x, dat, key.order());
       if(knots.n_unique < 2L){
         /* no variation in x */
         out.res = all_equal;
@@ -207,15 +202,14 @@ namespace {
 
       /* TODO: re-order and copy is expensive here is all we want is to add a
        * slope */
-      const arma::vec y = dat.wY(key.order()),
-             /* TODO: avoid needing to have a full parent vector? */
-             parent_use = parent(key.order());
-      const arma::mat B = cur_design_mat.cols(key.order());
+      const arma::vec &y = dat.wY,
+            &parent_use = parent;
+      const arma::mat &B = cur_design_mat;
       if(knots.n_unique < 3L or knots.knots.n_elem < 1L){
         /* could be a dummy. Include linear term */
         out.res = only_linear;
         auto lin_res = add_linear_term
-          (old_eq, x, y, parent_use, B, dat.lambda, dat.N);
+          (old_eq, x, y, parent_use, B, dat.lambda, dat.N, key.order());
         out.min_se_less_var = get_min_se_less_var(lin_res.new_eq, dat.lambda);
         return out;
       }
@@ -231,7 +225,7 @@ namespace {
 
         auto best_knot = get_new_node
           (old_eq, x, y, parent_use, B, knots, dat.lambda, dat.N,
-           use_one_hinge);
+           use_one_hinge, key.order());
         out.res = use_one_hinge ? one_hinge : hinge;
         out.min_se_less_var = best_knot.min_se_less_var;
         out.knot = best_knot.knot;

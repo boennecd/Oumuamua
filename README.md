@@ -38,7 +38,7 @@ res <- lapply(N, function(N_i){
   # data used for validation
   test_dat <- additiv_sim(test_size, p)
   
-  replicate(100, {
+  replicate(1000, {
     # simulate
     sims <- additiv_sim(N_i, p)
     
@@ -63,17 +63,37 @@ names(res) <- N
 lapply(res, function(x) apply(x, 1, function(z) 
   c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
 #> $`100`
-#>                earth   oumua
-#> mean           3.904 1.42322
-#> standard error 1.983 0.01771
+#>                 earth    oumua
+#> mean           14.444 1.399002
+#> standard error  5.279 0.004503
 #> 
 #> $`200`
-#>                earth    oumua
-#> mean           8.570 1.180084
-#> standard error 7.266 0.005963
+#>                 earth    oumua
+#> mean           1.9802 1.183308
+#> standard error 0.4897 0.002059
 #> 
 #> $`500`
-#>                   earth    oumua
-#> mean           1.088882 1.060981
-#> standard error 0.007348 0.002074
+#>                 earth     oumua
+#> mean           1.5320 1.0843347
+#> standard error 0.2431 0.0007977
+```
+
+``` r
+library(microbenchmark)
+```
+
+``` r
+addi_runtimes <- local({
+  run_dat <- additiv_sim(10000, 10)  
+  microbenchmark(
+    earth = earth_call(run_dat), oumua = oumua_call(run_dat), 
+    times = 10)
+})
+```
+
+``` r
+summary(addi_runtimes)
+#>    expr    min     lq  mean median    uq   max neval
+#> 1 earth  96.14  97.28 105.9  100.9 115.1 129.4    10
+#> 2 oumua 425.84 429.80 445.8  448.7 452.5 479.8    10
 ```

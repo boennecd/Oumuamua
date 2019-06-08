@@ -27,6 +27,10 @@ extern "C" {
       const double *alpha, const double *a, const int *lda,
       const double *x, const int *incx, const double *beta,
       double *y, const int *incy FCLEN);
+  void F77_NAME(daxpy)(
+      const int *n, const double *da,
+      const double *dx, const int *incx,
+      double *dy, const int *incy);
 }
 
 #endif

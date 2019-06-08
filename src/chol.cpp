@@ -63,7 +63,7 @@ void chol_decomp::update_sub(const arma::mat &V){
       &C_L, &C_U, &C_T, &C_N, &n, &nrhs, &D_ONE, chol_.begin(), &p,
       chol_.colptr(n), &p);
 
-  /* update lower right block. TODO: do this inplace */
+  /* update lower right block. */
   if(p - n == 1L){
     chol_(n, n) = V(n, 0);
     double *xn = chol_.colptr(n) + n;

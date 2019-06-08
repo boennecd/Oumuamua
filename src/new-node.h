@@ -16,8 +16,13 @@ inline double get_min_se_less_var
   (const normal_equation &eq, const double lambda){
   if(eq.n_elem() == 0L)
     return 0.;
-  const arma::vec coef = eq.get_coef();
-  return -arma::dot(coef, eq.get_rhs() + lambda * coef);
+  const arma::vec coef = eq.get_coef(),
+                   rhs = eq.get_rhs();
+  double out = 0;
+  const double *r = rhs.begin();
+  for(auto x : coef)
+    out += x * (lambda * x + *r++);
+  return -out;
 }
 
 /* Find best knot position with smallest squared error given a new predictor
@@ -35,26 +40,28 @@ inline double get_min_se_less_var
  * Args:
  *   old_problem: "old" normal equation which we add two new equations to.
  *   We denote it by Kx = z.
- *   x: ordered covariate vector with active observations.
- *   y: ordered centered outcomes.
- *   parent: ordered values of parent node.
- *   B: centered "old" design matrix in same.
+ *   x: all covarite values in original order.
+ *   y: all outcomes in original order.
+ *   parent: values of parent node in original order.
+ *   B: centered "old" design matrix.
  *   knots: interior knot positions to consider.
  *   lambda: L2 penalty on coefficients.
- *   N: total number of observations (including non-active observations).
+ *   N: total number of observations. TODO: can be infered from other
+ *   arguments.
  *   one_hinge: true if one hinge should be added.
+ *   indices: indices with order of *active* observations.
  */
 new_node_res get_new_node
   (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
    const arma::vec &parent, const arma::mat &B, const arma::vec &knots,
-   const double lambda, const unsigned N, const bool one_hinge);
+   const double lambda, const unsigned N, const bool one_hinge,
+   const arma::uvec &indices);
 
 struct add_linear_term_res {
   /* updated normal equation with covariate times parent */
   normal_equation new_eq;
-  /* covariate times parent for subset of active observations. The term is
-   * centered */
-  arma::vec x_cen;
+  /* mean for covariate times the parent */
+  const double x_parent_mean;
 };
 
 /* similar function to the one above but only adds an interaction between
@@ -62,6 +69,6 @@ struct add_linear_term_res {
 add_linear_term_res add_linear_term
   (const normal_equation &old_problem, const arma::vec &x, const arma::vec &y,
    const arma::vec &parent, const arma::mat &B, const double lambda,
-   const unsigned N);
+   const unsigned N, const arma::uvec &indices);
 
 #endif
