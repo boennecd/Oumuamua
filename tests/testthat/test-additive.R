@@ -14,7 +14,7 @@ test_that("Get the same with additive model", {
   #####
   # check design matrix
   fit <- oumua(y ~ ., dat, control = oumua.control(
-    nk = 15L, penalty = 2L, lambda = 10))
+    nk = 15L, penalty = 2L, lambda = 10, endspan = 1L, minspan = 1L))
   X <- fit$X[, -1]
   vnames <- colnames(X)
   vnames <- gsub("(h\\()(.+)(\\))$", "pmax(\\2, 0)", vnames)
@@ -43,7 +43,11 @@ test_that("Get the same with additive model", {
 
   #####
   # with different minspan and endspan
-  expect_true(FALSE)
+  fit <- oumua(y ~ ., dat, control = oumua.control(
+    nk = 15L, penalty = 2L, lambda = 10, endspan = 30L, minspan = 30L))
+  expect_s3_class(fit, "oumua")
+  expect_known_value(fit[
+    c("coefficients", "backward_stats")], "additive-plain-large-span.RDS")
 })
 
 test_that("Get the same with additive model with dummies", {

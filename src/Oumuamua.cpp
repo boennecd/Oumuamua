@@ -71,8 +71,7 @@ namespace {
 inline knot_res get_knots(
     const arma::vec &x, const problem_data &dat, const arma::uvec &indices){
   /* TODO: do somethings smarter using that indices yield a sorted vector */
-  const arma::vec x_use = x(indices);
-  return get_knots(x_use, dat.endspan, dat.minspan);
+  return get_knots(x, dat.endspan, dat.minspan, indices);
 }
 
 namespace {

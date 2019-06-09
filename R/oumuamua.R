@@ -81,14 +81,10 @@ oumua.fit <- function(x, y, offset = NULL, weights = NULL, do_check = TRUE,
     weights <- rep(1, N)
   control <- do.call(oumua.control, control)
 
-  # endspan <- if(is.na(control$endspan))
-  #   max(1L, as.integer(N / 10L)) else control$endspan
-  # minspan <- if(is.na(control$minspan))
-  #   max(1L, as.integer(N / 10L)) else control$minspan
-
-  # TODO: change!
-  endspan <- 1L
-  minspan <- 1L
+  endspan <- if(is.na(control$endspan))
+    max(1L, as.integer(N / 100L)) else control$endspan
+  minspan <- if(is.na(control$minspan))
+    max(1L, as.integer(N / 100L)) else control$minspan
 
   # form tree
   fit <- omua_to_R(

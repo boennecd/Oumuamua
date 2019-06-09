@@ -285,8 +285,7 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
       const arma::uvec keepD = arma::find(parentD > 0.);
       idx.subset(keepD);
 
-      arma::vec tmp = x_orgD(idx.order());
-      knots = get_all_knots(tmp);
+      knots = get_all_knots(x_orgD, idx.order());
 
       /* brute force solution */
       brute = brute_solve(x_orgD, yD, knots, lambda, parentD, B_cen);

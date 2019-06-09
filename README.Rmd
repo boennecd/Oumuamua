@@ -37,12 +37,28 @@ p <- 10
 ```
 
 ```{r addit_performance, cache = 1, dependson = "sim_params"}
+# returns minspan and endspan arguments. Similar to Friedman (1991) 
+# though without ajdusting N for number of non-negative elements in basis 
+# function.
+get_spans <- function(N, p, alpha = .05){
+  Np <- N * p
+  minspan <- as.integer(ceiling(-log2(-1/Np * log1p(-alpha)) / 2.5))
+  endspan <- as.integer(ceiling(3 -log2(alpha / p)))
+  c(minspan = minspan, endspan = endspan)
+}
+
 # functions to fit models
-earth_call <- function(sims)
-  earth(y ~ ., data = sims, endspan = 1, minspan = 1, degree = 1, penalty = 2)
-oumua_call <- function(sims)
+earth_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
+  earth(y ~ ., data = sims, minspan = spans["minspan"], 
+        endspan = spans["endspan"], degree = 1, penalty = 2)
+}
+oumua_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
-    minspan = 1L, endspan = 1L, degree = 1L, penalty = 2, lambda = 1))
+    minspan = spans["minspan"], endspan = spans["endspan"], degree = 1L, 
+    penalty = 2, lambda = 1))
+}
 
 # run simulations
 set.seed(3779892)
@@ -85,10 +101,10 @@ addi_runtimes <- local({
   run_dat <- additiv_sim(10000, 10)  
   microbenchmark(
     earth = earth_call(run_dat), oumua = oumua_call(run_dat), 
-    times = 10)
+    times = 100)
 })
 ```
 
 ```{r show_addit_runtimes}
-summary(addi_runtimes)
+addi_runtimes
 ```

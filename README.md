@@ -25,12 +25,28 @@ p <- 10
 ```
 
 ``` r
+# returns minspan and endspan arguments. Similar to Friedman (1991) 
+# though without ajdusting N for number of non-negative elements in basis 
+# function.
+get_spans <- function(N, p, alpha = .05){
+  Np <- N * p
+  minspan <- as.integer(ceiling(-log2(-1/Np * log1p(-alpha)) / 2.5))
+  endspan <- as.integer(ceiling(3 -log2(alpha / p)))
+  c(minspan = minspan, endspan = endspan)
+}
+
 # functions to fit models
-earth_call <- function(sims)
-  earth(y ~ ., data = sims, endspan = 1, minspan = 1, degree = 1, penalty = 2)
-oumua_call <- function(sims)
+earth_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
+  earth(y ~ ., data = sims, minspan = spans["minspan"], 
+        endspan = spans["endspan"], degree = 1, penalty = 2)
+}
+oumua_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
-    minspan = 1L, endspan = 1L, degree = 1L, penalty = 2, lambda = 1))
+    minspan = spans["minspan"], endspan = spans["endspan"], degree = 1L, 
+    penalty = 2, lambda = 1))
+}
 
 # run simulations
 set.seed(3779892)
@@ -63,19 +79,19 @@ names(res) <- N
 lapply(res, function(x) apply(x, 1, function(z) 
   c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
 #> $`100`
-#>                 earth    oumua
-#> mean           14.444 1.399002
-#> standard error  5.279 0.004503
+#>                   earth    oumua
+#> mean           1.424117 1.404078
+#> standard error 0.005947 0.004507
 #> 
 #> $`200`
-#>                 earth    oumua
-#> mean           1.9802 1.183308
-#> standard error 0.4897 0.002059
+#>                   earth    oumua
+#> mean           1.205834 1.185529
+#> standard error 0.002613 0.002049
 #> 
 #> $`500`
-#>                 earth     oumua
-#> mean           1.5320 1.0843347
-#> standard error 0.2431 0.0007977
+#>                    earth     oumua
+#> mean           1.0930594 1.0845603
+#> standard error 0.0008732 0.0007714
 ```
 
 ``` r
@@ -87,13 +103,14 @@ addi_runtimes <- local({
   run_dat <- additiv_sim(10000, 10)  
   microbenchmark(
     earth = earth_call(run_dat), oumua = oumua_call(run_dat), 
-    times = 10)
+    times = 100)
 })
 ```
 
 ``` r
-summary(addi_runtimes)
-#>    expr    min     lq  mean median    uq   max neval
-#> 1 earth  96.14  97.28 105.9  100.9 115.1 129.4    10
-#> 2 oumua 425.84 429.80 445.8  448.7 452.5 479.8    10
+addi_runtimes
+#> Unit: milliseconds
+#>   expr    min     lq   mean median     uq   max neval
+#>  earth  77.33  79.99  86.16  82.08  86.15 141.5   100
+#>  oumua 116.63 119.83 125.61 122.37 126.61 209.7   100
 ```
