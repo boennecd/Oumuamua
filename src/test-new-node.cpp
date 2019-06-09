@@ -6,6 +6,7 @@
 #include "test-utils.h"
 #include "miscellaneous.h"
 #include "sort.h"
+#include "knots.h"
 
 static constexpr unsigned N = 25;
 
@@ -233,7 +234,7 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
       knots = knots.subvec(1L, knots.n_elem - 2L);
 
       /* set penalty parameter */
-      double lambda = 10.;
+      const double lambda = 10.;
 
       /* brute force solution */
       auto brute = brute_solve(x_org, y, knots, lambda, parent, B_cen);
@@ -249,6 +250,57 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
 
       auto res = get_new_node(
         eq, x_org, y, parent, B_cen, knots, lambda, N, false, idx.order());
+
+      expect_true(
+        std::abs(brute.min_se_less_var - res.min_se_less_var) < 1e-8);
+      expect_true(brute.knot == res.knot);
+
+      /* also works with duplicates values */
+      const arma::uword N2 = N * 2;
+      arma::mat BD(2, N2);
+      BD.row(0).subvec(0,  N - 1) = X.row(0);
+      BD.row(0).subvec(N, N2 - 1) = X.row(0);
+      BD.row(1).subvec(0,  N - 1) = X.row(1);
+      BD.row(1).subvec(N, N2 - 1) = X.row(1);
+
+      const arma::vec x_orgD = BD.row(1).t();
+
+      set_hinge(BD, 0,  1, parent_knot, transpose);
+      set_hinge(BD, 1, -1, parent_knot, transpose);
+
+      B_cen = BD;
+      center_cov(B_cen, 0, transpose);
+      center_cov(B_cen, 1, transpose);
+
+      /* get parent */
+      const arma::vec parentD = BD.row(parent_idx).t();
+
+      /* get outcome*/
+      arma::vec yD(N2);
+      yD.subvec(0,  N - 1) = y;
+      yD.subvec(N, N2 - 1) = y;
+
+      /* get x, subset that is active, and the knots */
+      idx = sort_keys(x_orgD);
+      const arma::uvec keepD = arma::find(parentD > 0.);
+      idx.subset(keepD);
+
+      arma::vec tmp = x_orgD(idx.order());
+      knots = get_all_knots(tmp);
+
+      /* brute force solution */
+      brute = brute_solve(x_orgD, yD, knots, lambda, parentD, B_cen);
+
+      /* implementation. First get the old solution */
+      {
+        arma::mat gram = B_cen * B_cen.t();
+        gram.diag() += lambda;
+        arma::vec k = BD * yD;
+        eq.update_sub(gram, k);
+      }
+
+      res = get_new_node(
+        eq, x_orgD, yD, parentD, B_cen, knots, lambda, N2, false, idx.order());
 
       expect_true(
         std::abs(brute.min_se_less_var - res.min_se_less_var) < 1e-8);

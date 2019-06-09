@@ -1,5 +1,6 @@
 #include "new-node.h"
 #include "blas-lapack.h"
+#include <cmath>
 
 using std::to_string;
 
@@ -30,7 +31,9 @@ inline void check_new_node_input
       invalid_arg("too many knots (" + to_string(knots->n_elem) + ", " +
         to_string(n) + ")");
     if(knots->operator[](0L) >= x_sort[0L])
-      invalid_arg("first knot is not an interior knot");
+      invalid_arg("first knot is not an interior knot (" +
+        to_string(knots->operator[](0L)) + ", " +
+        to_string(x_sort[0L]) + ")");
     if(knots->tail(1L)(0L) <= x_sort.tail(1L)(0L))
       invalid_arg("last knot is not an interior knot");
   }
@@ -171,8 +174,19 @@ new_node_res get_new_node
           ++new_active_end);
     }
 
-    /* we need to compute two squares of sums */
+
+    /* make update on active observations */
+    const double knot_diff = knot_old - *knot;
+    k.at(0L) += knot_diff * grad_term_old;
+    if(!fresh)
+      V.rows(sold) += knot_diff * V_old_h;
+    if(!one_hinge)
+      V(p, 0L) += knot_diff * V_x_h;
+    V(idx_last_term, 0L) +=
+      knot_diff * (2. * parent_sq_h - sum_parent_sq * (knot_old + *knot));
+
     double sl = 0.;
+    const double sum_parent_old = sum_parent;
     for(const arma::uword *i = active_end; i != new_active_end; ++i){
       const double x_cen = x.at(*i) * parent.at(*i) - x_parent_mean;
       const double parent_i = parent.at(*i),
@@ -198,18 +212,6 @@ new_node_res get_new_node
         sl += par_x_less_knot;
       }
 
-      /* make update on active observations */
-      const double knot_diff = knot_old - *knot;
-      k.at(0L) += knot_diff * grad_term_old;
-      if(!fresh)
-        V.rows(sold) += knot_diff * V_old_h;
-      if(!one_hinge)
-        V(p, 0L) += knot_diff * V_x_h;
-      sl += su + sum_parent * knot_diff;
-      V(idx_last_term, 0L) +=
-        knot_diff * (2. * parent_sq_h - sum_parent_sq * (knot_old + *knot)) +
-        (su * su - sl * sl) / dN;
-
       /* update intermediaries */
       grad_term_old += y_i * parent_i;
       if(!fresh)
@@ -219,15 +221,22 @@ new_node_res get_new_node
 
       if(!one_hinge)
         V_x_h += x_cen * parent_i;
+
       parent_sq_h   += parent_i_sq * x_i;
       sum_parent    += parent_i;
       sum_parent_sq += parent_i_sq;
-      su = sl;
     }
+    sl += su + sum_parent_old * knot_diff;
+    V(idx_last_term, 0L) += (su * su - sl * sl) / dN;
+    su = sl;
 
     /* update solution */
     problem_to_update.update_sub(V, k);
     const double se = get_min_se_less_var(problem_to_update, lambda);
+#ifdef OUMU_DEBUG
+    if(std::isnan(se))
+      throw std::runtime_error("'se' nan");
+#endif
     if(se < out.min_se_less_var){
       out.min_se_less_var = se;
       out.knot = *knot;
