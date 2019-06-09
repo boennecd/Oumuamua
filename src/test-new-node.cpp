@@ -99,7 +99,6 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
                           parent.t() * y);
 
       sort_keys idx(x);
-      idx.subset(arma::find(parent.col(0) > 0));
       arma::mat B = parent_cen.t();
 
       auto res = add_linear_term(
@@ -227,10 +226,14 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
       /* get x, subset that is active, and the knots */
       const arma::vec x_org = X.row(1).t();
       sort_keys idx(x_org);
-      const arma::uvec keep = arma::find(parent > 0.);
-      idx.subset(keep);
-      const arma::vec x_active = x_org(idx.order());
-      arma::vec knots = x_active;
+      arma::vec knots;
+      {
+        sort_keys tmp = idx;
+        const arma::uvec keep = arma::find(parent > 0.);
+        tmp.subset(keep);
+        const arma::vec x_active = x_org(tmp.order());
+        knots = x_active;
+      }
       knots = knots.subvec(1L, knots.n_elem - 2L);
 
       /* set penalty parameter */
@@ -282,10 +285,7 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
 
       /* get x, subset that is active, and the knots */
       idx = sort_keys(x_orgD);
-      const arma::uvec keepD = arma::find(parentD > 0.);
-      idx.subset(keepD);
-
-      knots = get_all_knots(x_orgD, idx.order());
+      knots = get_all_knots<true>(x_orgD, idx.order(), parentD);
 
       /* brute force solution */
       brute = brute_solve(x_orgD, yD, knots, lambda, parentD, B_cen);

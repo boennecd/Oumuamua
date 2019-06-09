@@ -13,6 +13,13 @@ using std::size_t;
 using std::to_string;
 static constexpr double no_knot = std::numeric_limits<double>::quiet_NaN();
 
+template<class T>
+void remove_first(T& container, const typename T::value_type value){
+  auto idx = std::find(std::begin(container), std::end(container), value);
+  if(idx != std::end(container))
+    container.erase(idx);
+}
+
 namespace {
   /* class to hold data to pass around */
   struct problem_data {
@@ -30,38 +37,28 @@ namespace {
     /* holds additional information than the base class */
 
     /* indices of covariate that can become children */
-    mutable arma::uvec active_covs;
+    mutable std::vector<arma::uword> active_covs;
 
   public:
-    /* sorted indices with of *active* (non-zero) observations */
-    const sort_keys active_observations;
     /* term for all observations (active and non-active) in original order */
     const arma::vec x;
 
     extended_cov_node
       (const unsigned cov_index, const double knot, const double sign,
        const unsigned depth, const unsigned add_idx,
-       const cov_node * const parent, const arma::uvec &active_covs,
+       const cov_node * const parent, const std::vector<arma::uword> &active_covs,
        const sort_keys &cov_keys, const arma::uvec &active_subset,
        const arma::vec &x):
       cov_node(cov_index, knot, sign, depth, add_idx, parent),
-      active_covs(active_covs),
-      active_observations(([&]{
-        sort_keys out = cov_keys;
-        if(cov_keys.order().n_elem == active_subset.n_elem)
-          return out;
-        out.subset(active_subset);
-        return out;
-      })()), x(x) { }
+      active_covs(active_covs),  x(x) { }
 
     /* removes a covariate from the active list e.g., if one finds that all
      * covariate values are equal for the active observations */
     void remove_active_cov(const arma::uword idx) const {
-      arma::uvec matches = arma::find(active_covs != idx);
-      active_covs = active_covs(matches);
+      remove_first(active_covs, idx);
     }
 
-    const arma::uvec& get_active_covs() const {
+    const std::vector<arma::uword>& get_active_covs() const {
       return active_covs;
     }
   };
@@ -70,8 +67,13 @@ namespace {
 /* overload to avoid wrong order of arguments */
 inline knot_res get_knots(
     const arma::vec &x, const problem_data &dat, const arma::uvec &indices){
-  /* TODO: do somethings smarter using that indices yield a sorted vector */
-  return get_knots(x, dat.endspan, dat.minspan, indices);
+  arma::vec dummy;
+  return get_knots(x, dat.endspan, dat.minspan, indices, dummy);
+}
+inline knot_res get_knots(
+    const arma::vec &x, const problem_data &dat, const arma::uvec &indices,
+    const arma::vec &parent){
+  return get_knots(x, dat.endspan, dat.minspan, indices, parent);
 }
 
 namespace {
@@ -90,7 +92,7 @@ namespace {
     /* covariate index */
     unsigned cov_index;
     /* pointer to parent node if the parent is not the root */
-    const extended_cov_node * parent = nullptr;
+    extended_cov_node * parent = nullptr;
   };
 
   /* worker class to be used for children of the root node */
@@ -168,7 +170,7 @@ namespace {
     /* normal equation before updates */
     const normal_equation &old_eq;
     /* pointer to parent node */
-    const extended_cov_node * const parent_node;
+    extended_cov_node * const parent_node;
     /* current centered design matrix */
     const arma::mat &cur_design_mat;
 
@@ -179,11 +181,7 @@ namespace {
       out.cov_index = cov_index;
 
       /* get sorted covariate values and find knots */
-      const sort_keys key = ([&]{
-        sort_keys out = dat.keys[cov_index];
-        out.subset(parent_node->active_observations);
-        return out;
-      })();
+      const sort_keys &key = dat.keys[cov_index];
 
       if(key.order().n_elem < 3L){
         /* too few observations */
@@ -192,15 +190,13 @@ namespace {
       }
 
       const arma::vec x = dat.X.row(cov_index).t();
-      auto knots = get_knots(x, dat, key.order());
+      auto knots = get_knots(x, dat, key.order(), parent);
       if(knots.n_unique < 2L){
         /* no variation in x */
         out.res = all_equal;
         return out;
       }
 
-      /* TODO: re-order and copy is expensive here is all we want is to add a
-       * slope */
       const arma::vec &y = dat.wY,
             &parent_use = parent;
       const arma::mat &B = cur_design_mat;
@@ -260,35 +256,40 @@ namespace {
   };
 }
 
-template<class T>
-void remove_first(T& container, const typename T::value_type value){
-  auto idx = std::find(std::begin(container), std::end(container), value);
-  if(idx != std::end(container))
-    container.erase(idx);
-}
-
 /* prints node information */
 void print_knot_info(
-    const worker_res &res, const arma::vec &X_scales, const arma::vec &X_means){
-  if(!res.parent){
-    OPRINTF("Term(s) info (covariate idx, knot):  %5d, %14.4f\n",
-            res.cov_index,
-            res.knot * X_scales.at(res.cov_index) +
-              X_means.at(res.cov_index));
-  } else
-    throw std::runtime_error("not implemented");
+    const cov_node &res, const arma::vec &X_scales, const arma::vec &X_means,
+    const bool parent_print = false){
+  if(res.parent)
+    print_knot_info(*res.parent, X_scales, X_means, true);
+
+  const std::string msg =
+    parent_print ?
+    "Term(s) info -- parent (covariate idx, knot, sign):  %5d, %14.4f %3d\n" :
+    "Term(s) info           (covariate idx, knot, sign):  %5d, %14.4f %3d\n";
+
+  OPRINTF(msg.c_str(),
+          res.cov_index,
+          res.knot * X_scales.at(res.cov_index) +
+            X_means.at(res.cov_index),
+            (int)res.sign);
 }
 
 void print_knot_info(
-    const cov_node &res, const arma::vec &X_scales, const arma::vec &X_means){
-  if(!res.parent){
-    OPRINTF("Term info (covariate idx, knot, sign):  %5d, %14.4f %3d\n",
-            res.cov_index,
-            res.knot * X_scales.at(res.cov_index) +
-              X_means.at(res.cov_index),
-            (int)res.sign);
-  } else
-    throw std::runtime_error("not implemented");
+    const worker_res &res, const arma::vec &X_scales, const arma::vec &X_means,
+    const bool parent_print = false){
+  if(res.parent)
+    print_knot_info(*res.parent, X_scales, X_means, true);
+
+  const std::string msg =
+    parent_print ?
+    "Term(s) info -- parent       (covariate idx, knot):  %5d, %14.4f\n" :
+    "Term(s) info                 (covariate idx, knot):  %5d, %14.4f\n";
+  OPRINTF(msg.c_str(),
+          res.cov_index,
+          res.knot * X_scales.at(res.cov_index) +
+            X_means.at(res.cov_index));
+
 }
 
 /* create a map from the index that the node is added to a pointer to the node */
@@ -426,8 +427,25 @@ omua_res omua
       }
 
       if(degree > 1L){
-        /* TODO: iterate through children */
-        throw std::runtime_error("not implemented");
+        std::function<void(extended_cov_node * const)> add_tasks =
+          [&](extended_cov_node * const node){
+            if(node->depth + 1 > degree)
+              return;
+
+            const arma::uvec &active_covs = node->get_active_covs();
+            for(auto i : active_covs){
+              non_root_worker task {
+                dat, i, node->x, eq, node, cur_design_mat };
+              results.push_back(task());
+            }
+
+            for(auto &x : node->children)
+              add_tasks((extended_cov_node *)x.get());
+        };
+
+        for(auto &r : root_childrens)
+          add_tasks((extended_cov_node *)r.get());
+
       }
 
       /* find best new term */
@@ -442,7 +460,11 @@ omua_res omua
             continue;
           }
         } else {
-          throw std::runtime_error("not implemented");
+          if(r.res == all_equal){
+            /* remove the term so we do not call it again */
+            r.parent->remove_active_cov(r.cov_index);
+            continue;
+          }
         }
 
         const double gcv_val =
@@ -458,22 +480,18 @@ omua_res omua
         /* TODO: fix */
         throw std::runtime_error("not implemented when no new term is found");
 
-      const bool is_root_child = !best->parent;
-      if(!is_root_child)
-        throw std::runtime_error("not implemented");
-
       if(best->res == hinge or best->res == one_hinge){
         auto add_root_node = [&](const double sign){
           const unsigned cov_index = best->cov_index,
                          desg_indx = n_terms++;
           const double knot = best->knot;
 
-          /* update design matrix. Wait with centering to later */
-          design_mat.row(desg_indx) = dat.X.row(cov_index);
-          set_hinge(design_mat, desg_indx, sign, knot, transpose);
-
           /* add node */
-          {
+          if(!best->parent){
+            /* update design matrix. Wait with centering to later */
+            design_mat.row(desg_indx) = dat.X.row(cov_index);
+            set_hinge(design_mat, desg_indx, sign, knot, transpose);
+
             const arma::uvec active_subset = arma::find(
               design_mat.row(desg_indx) > 0);
             std::vector<arma::uword> active_covs = root_covs;
@@ -483,6 +501,25 @@ omua_res omua
               cov_index, knot, sign, 0L, desg_indx, nullptr, active_covs,
               dat.keys[cov_index], std::move(active_subset),
               design_mat.row(desg_indx).t()));
+
+          } else {
+            extended_cov_node &parent_node = *best->parent;
+
+            /* update design matrix. Wait with centering to later */
+            design_mat.row(desg_indx) = dat.X.row(cov_index);
+            set_hinge(design_mat, desg_indx, sign, knot, transpose);
+            design_mat.row(desg_indx) %= parent_node.x.t();
+
+            const arma::uvec active_subset = arma::find(
+              design_mat.row(desg_indx) > 0);
+            std::vector<arma::uword> active_covs = parent_node.get_active_covs();
+            remove_first(active_covs, cov_index);
+
+            parent_node.children.emplace_back(new extended_cov_node(
+                cov_index, knot, sign, parent_node.depth + 1, desg_indx,
+                &parent_node, active_covs, dat.keys[cov_index],
+                std::move(active_subset), design_mat.row(desg_indx).t()));
+
           }
 
           /* update normal equation */
@@ -505,11 +542,11 @@ omua_res omua
                        desg_indx = n_terms++;
         const double knot = no_knot;
 
-        /* update design matrix. Wait with centering to later */
-        design_mat.row(desg_indx) = dat.X.row(cov_index);
-
         /* add node */
-        {
+        if(!best->parent){
+          /* update design matrix. Wait with centering to later */
+          design_mat.row(desg_indx) = dat.X.row(cov_index);
+
           /* just in case the covariate is sparse */
           const arma::uvec active_subset = arma::find(
             design_mat.row(desg_indx) != 0);
@@ -521,15 +558,33 @@ omua_res omua
               dat.keys[cov_index], std::move(active_subset),
               design_mat.row(desg_indx).t()));
 
-          /* update normal equation */
-          arma::vec k(1);
-          k.at(0) = arma::dot(design_mat.row(desg_indx), dat.wY);
-          center_cov(design_mat, desg_indx, transpose);
-          arma::mat V =
-            design_mat.rows(0, desg_indx) * design_mat.row(desg_indx).t();
-          V(desg_indx, 0) += lambda;
-          eq.update(V, k);
+        } else {
+          extended_cov_node &parent_node = *best->parent;
+
+          /* update design matrix. Wait with centering to later */
+          design_mat.row(desg_indx) = dat.X.row(cov_index);
+          design_mat.row(desg_indx) %= parent_node.x.t();
+
+          const arma::uvec active_subset = arma::find(
+            design_mat.row(desg_indx) != 0);
+          parent_node.remove_active_cov(cov_index);
+
+          root_childrens.emplace_back(new extended_cov_node(
+              cov_index, knot, 0, 0L, desg_indx, nullptr, active_root_covs,
+              dat.keys[cov_index], std::move(active_subset),
+              design_mat.row(desg_indx).t()));
+
         }
+
+        /* update normal equation */
+        arma::vec k(1);
+        k.at(0) = arma::dot(design_mat.row(desg_indx), dat.wY);
+        center_cov(design_mat, desg_indx, transpose);
+        arma::mat V =
+          design_mat.rows(0, desg_indx) * design_mat.row(desg_indx).t();
+        V(desg_indx, 0) += lambda;
+        eq.update(V, k);
+
       } else
         throw std::runtime_error("unsupported 'res_type'");
 

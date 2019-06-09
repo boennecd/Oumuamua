@@ -19,11 +19,18 @@ namespace {
       cov_node(source.cov_index, source.knot, source.sign, source.depth,
                source.add_idx, parent),
        var(([&]{
-        /* TODO: could be done quicker if parent is very sparse */
+        if(source.has_knot){
+          /* TODO: could be done quicker if parent is very sparse */
+          arma::vec out = X.col(source.cov_index);
+          set_hinge(out, 0, sign, knot);
+          if(parent)
+             out %= parent->var;
+          return out;
+        }
+
         arma::vec out = X.col(source.cov_index);
-        set_hinge(out, 0, sign, knot);
         if(parent)
-           out %= parent->var;
+          out %= parent->var;
         return out;
       })()) { }
   };

@@ -3,6 +3,7 @@
 #include "arma.h"
 #include <numeric>
 #include <set>
+#include <algorithm>
 
 class sort_keys {
   using index_pairs = std::map<std::size_t, std::size_t>;
@@ -32,16 +33,15 @@ public:
    *   3, 1
    *
    * Complexity:
-   *   main burden in current implementation is forming one binary tree and
-   *   a series of log(N) lookups.
+   *   main burden in current implementation is forming one binary tree on the
+   *   caller side  and a series of log(N) lookups.
    */
-  void subset(const arma::uvec &keep){
+  void subset(const std::set<arma::uword> &keep_set){
     if(order_vec.n_elem < 1L)
       return;
-    std::set<arma::uword> keep_set(keep.begin(), keep.end());
 
     unsigned n_add = 0.;
-    arma::uvec order_new(order_vec.n_elem);
+    arma::uvec order_new(std::min((std::size_t)order_vec.n_elem, keep_set.size()));
     arma::uword *n = order_new.begin();
     const auto set_end = keep_set.end();
     for(auto old : order_vec)
@@ -52,6 +52,10 @@ public:
 
     order_new.resize(n_add);
     order_vec = std::move(order_new);
+  }
+  void subset(const arma::uvec &keep_vec){
+    const std::set<arma::uword> keep_set(keep_vec.begin(), keep_vec.end());
+    subset(keep_set);
   }
 };
 

@@ -141,11 +141,22 @@ oumua.fit <- function(x, y, offset = NULL, weights = NULL, do_check = TRUE,
 # function to format nodes in tree
 format_node <- function(node, x_means, x_scales, x_names, parent = NULL){
   class(node) <- "ouNode"
-  if(is.nan(node$knot))
-    stop("not implemented")
+  if(is.nan(node$knot)){
+    cov_idx <- node$cov_index + 1
+    node$description <- x_names[cov_idx]
+    if(!is.null(parent))
+      node$description <- paste0(parent$description, ":", node$description)
+
+    if(length(node$children) > 0)
+      node$children <- lapply(
+        node$children, format_node, x_means = x_means, x_scales = x_scales,
+        x_names = x_names, parent = node)
+
+    return(node)
+  }
 
   # format description
-  cov_idx = node$cov_index + 1
+  cov_idx <- node$cov_index + 1
   node$mean <- x_means[cov_idx]
   node$scale <- x_scales[cov_idx]
 
@@ -164,7 +175,7 @@ format_node <- function(node, x_means, x_scales, x_names, parent = NULL){
   if(length(node$children) > 0)
     node$children <- lapply(
       node$children, format_node, x_means = x_means, x_scales = x_scales,
-      x_names = x_names, parnet = node)
+      x_names = x_names, parent = node)
 
   node
 }

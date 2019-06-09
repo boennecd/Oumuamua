@@ -35,7 +35,9 @@ inline void check_new_node_input
         to_string(knots->operator[](0L)) + ", " +
         to_string(x_sort[0L]) + ")");
     if(knots->tail(1L)(0L) <= x_sort.tail(1L)(0L))
-      invalid_arg("last knot is not an interior knot");
+      invalid_arg("last knot is not an interior knot (" +
+        to_string(knots->tail(1L)(0L)) + ", " +
+        to_string(x_sort.tail(1L)(0L)) + ")");
   }
   if(old_problem.n_elem() != p)
     invalid_arg("invalid 'old_problem' or 'B' (" +
@@ -80,32 +82,41 @@ add_linear_term_res add_linear_term
     const arma::vec x_parent = x % parent;
     x_parent_mean = arma::sum(x_parent) / dN;
     const arma::vec x_cen = x_parent - x_parent_mean;
-    if(!fresh)
-      V.rows(sold) = B * x_parent;
+    if(!fresh){
+      const int m_b = B.n_rows, n_b = B.n_cols;
+      F77_CALL(dgemv)(
+        &C_N, &m_b, &n_b, &D_ONE, B.memptr(), &m_b, x_parent.memptr(),
+        &I_ONE, &D_ONE, V.memptr(), &I_ONE);
+    }
 
-    for(auto z : x_cen)
-      V(p, 0L) += z * z;
-    V(p, 0L) += lambda + x_parent_mean * x_parent_mean * (dN - n);
+    V(p, 0L) = arma::dot(x_cen, x_cen);
+    V(p, 0L) += lambda;
     k.at(0) = arma::dot(x_parent, y);
 
   } else {
     x_parent_mean = 0;
+    double sum_weights = 0, ss = 0;
+    const int m_b = B.n_rows;
+
     for(auto idx : indices){
+      if(parent[idx] == 0.)
+        continue;
+
       const double x_parent = x[idx] * parent[idx];
-      x_parent_mean += x_parent;
+
+      /* use Welford's algorithm. See
+       *    https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm*/
+      const double diff_term = (x_parent - x_parent_mean);
+      sum_weights += 1;
+      x_parent_mean += diff_term / sum_weights;
+      ss += diff_term * (x_parent - x_parent_mean);
+
       if(!fresh)
-        V.rows(sold) += B.col(idx) * x_parent;
+        F77_CALL(daxpy)(
+          &m_b, &x_parent, B.colptr(idx), &I_ONE, V.memptr(), &I_ONE);
       k.at(0) += x_parent * y[idx];
-
     }
-    x_parent_mean /= dN;
-
-    /* TODO: avoid this loop */
-    for(auto idx : indices){
-      const double x_cen = x[idx] * parent[idx] - x_parent_mean;
-      V(p, 0L) += x_cen * x_cen;
-    }
-    V(p, 0L) += lambda + x_parent_mean * x_parent_mean * (dN - n);
+    V(p, 0L) += lambda + ss + x_parent_mean * x_parent_mean * (dN - n);
   }
 
   normal_equation out = old_problem;
@@ -143,7 +154,6 @@ new_node_res get_new_node
   const arma::vec x_cen = x % parent - x_parent_mean;
 
   /* prep for going through knot */
-  const arma::span sold = get_sold(fresh, p);
   arma::mat V(p + 1L + !one_hinge, 1L, arma::fill::zeros);
   arma::vec k(1L, arma::fill::zeros);
 
@@ -174,12 +184,12 @@ new_node_res get_new_node
           ++new_active_end);
     }
 
-
     /* make update on active observations */
     const double knot_diff = knot_old - *knot;
     k.at(0L) += knot_diff * grad_term_old;
     if(!fresh)
-      V.rows(sold) += knot_diff * V_old_h;
+      F77_CALL(daxpy)(
+          &m_B, &knot_diff, V_old_h.memptr(), &I_ONE, V.memptr(), &I_ONE);
     if(!one_hinge)
       V(p, 0L) += knot_diff * V_x_h;
     V(idx_last_term, 0L) +=
@@ -188,12 +198,15 @@ new_node_res get_new_node
     double sl = 0.;
     const double sum_parent_old = sum_parent;
     for(const arma::uword *i = active_end; i != new_active_end; ++i){
-      const double x_cen = x.at(*i) * parent.at(*i) - x_parent_mean;
-      const double parent_i = parent.at(*i),
-                parent_i_sq = parent_i * parent_i,
-                        x_i = x.at(*i),
-                        y_i = y.at(*i),
-            par_x_less_knot = parent_i * (x_i - *knot);
+      const double parent_i = parent.at(*i);
+      if(parent_i == 0.)
+        continue;
+
+      const double parent_i_sq = parent_i * parent_i,
+                           x_i = x.at(*i),
+                           y_i = y.at(*i),
+               par_x_less_knot = parent_i * (x_i - *knot),
+                         x_cen = x_i * parent_i - x_parent_mean;
 
       /* make update for *new* active observations */
       {

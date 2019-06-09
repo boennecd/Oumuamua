@@ -14,10 +14,22 @@ options(digits = 4)
 
 # Oumuamua
 
+## Additive function
+
 ```{r addit_sim}
+# generates correlated uniform variables 
+get_covs <- function(N, p, rho = .5){
+  X <- matrix(rnorm(N * p), nc = p)
+  Sig <- diag(p)
+  Sig[lower.tri(Sig)] <- Sig[upper.tri(Sig)] <- rho
+  X <- X %*% chol(Sig)
+  apply(X, 2, pnorm)
+}
+
+# simulates data 
 additiv_sim <- function(N, p){
   p <- max(5L, p)
-  x <- matrix(runif(N * p), nc = p)
+  x <- get_covs(N = N, p = p)
   y <- .1 * exp(4 * x[, 1]) + 4 / (1 + exp(-20 * (x[, 2] - 1/2))) + 
     3 * x[, 3] + 2 * x[, 4] + x[, 5] + rnorm(N)
   data.frame(y = y, x)
@@ -37,9 +49,9 @@ p <- 10
 ```
 
 ```{r addit_performance, cache = 1, dependson = "sim_params"}
-# returns minspan and endspan arguments. Similar to Friedman (1991) 
-# though without ajdusting N for number of non-negative elements in basis 
-# function.
+# returns minspan and endspan arguments. Similar to suggestion in Friedman 
+# (1991) though without ajdusting N for number of striclty positive elements 
+# in the basis function.
 get_spans <- function(N, p, alpha = .05){
   Np <- N * p
   minspan <- as.integer(ceiling(-log2(-1/Np * log1p(-alpha)) / 2.5))
@@ -108,3 +120,153 @@ addi_runtimes <- local({
 ```{r show_addit_runtimes}
 addi_runtimes
 ```
+
+## Interaction Example
+
+```{r def_interact_sim}
+interact_sim <- function(N, p){
+  p <- max(5L, p)
+  x <- get_covs(N = N, p = p)
+  y <- 10 * sin(pi * x[, 1] * x[, 2]) + 20 * (x[, 3] - 1/2)^2 + 
+    10 * x[, 4] + 5 * x[, 5] + rnorm(N)
+  data.frame(y = y, x)
+}
+```
+
+```{r interact_sim, cache = 1, dependson = "sim_params"}
+# functions to fit models
+earth_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
+  earth(y ~ ., data = sims, minspan = spans["minspan"], 
+        endspan = spans["endspan"], degree = 3, penalty = 3, nk = 30, 
+        fast.k = 0)
+}
+oumua_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
+  oumua(y ~ ., data = sims, control = oumua.control(
+    minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
+    penalty = 3, nk = 30L, lambda = 1))
+}
+
+# run simulations
+set.seed(3779892)
+res <- lapply(N, function(N_i){
+  # data used for validation
+  test_dat <- interact_sim(test_size, p)
+  
+  replicate(1000, {
+    # simulate
+    sims <- interact_sim(N_i, p)
+    
+    # fit models
+    efit <- earth_call(sims)
+    ofit <- oumua_call(sims)
+    
+    # compute MSE and return
+    mse <- function(fit){
+      yhat <- predict(fit, newdata = test_dat)
+      mean((test_dat$y - yhat)^2)
+    }
+    
+    c(earth = mse(efit), oumua = mse(ofit))
+  })
+})
+```
+
+```{r show_interact_sim}
+# stats for mean square error
+names(res) <- N
+lapply(res, function(x) apply(x, 1, function(z) 
+  c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
+```
+
+```{r interact_runtimes, cache = 1, dependson = "interact_sim"}
+inter_runtimes <- local({
+  run_dat <- interact_sim(10000, 10)  
+  microbenchmark(
+    earth = earth_call(run_dat), oumua = oumua_call(run_dat), 
+    times = 10)
+})
+```
+
+```{r show_interact_runtimes}
+inter_runtimes
+```
+
+## Interaction Example with Factor 
+
+```{r def_dum}
+factor_sim <- function(N, p){
+  p <- max(5L, p)
+  x <- get_covs(N = N, p = p)
+  
+  n_grp <- 5L
+  fac <- gl(n_grp, N / n_grp)
+  grp_effect <- seq(-3, 3, length.out = n_grp) 
+    
+  y <- 10 * sin(pi * x[, 1] * x[, 2]) + 20 * (x[, 3] - 1/2)^2 + 
+    10 * x[, 4] + 5 * x[, 5] + grp_effect[as.integer(fac)] + rnorm(N)
+  data.frame(y = y, x, fac = fac)
+}
+```
+
+```{r dum_sim, cache = 1, dependson = "sim_params"}
+# functions to fit models
+earth_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
+  earth(y ~ ., data = sims, minspan = spans["minspan"], 
+        endspan = spans["endspan"], degree = 3, penalty = 3, nk = 30, 
+        fast.k = 0)
+}
+oumua_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
+  oumua(y ~ ., data = sims, control = oumua.control(
+    minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
+    penalty = 3, lambda = 1, nk = 30L))
+}
+
+# run simulations
+set.seed(3779892)
+res <- lapply(N, function(N_i){
+  # data used for validation
+  test_dat <- factor_sim(test_size, p)
+  
+  replicate(1000, {
+    # simulate
+    sims <- factor_sim(N_i, p)
+    
+    # fit models
+    efit <- earth_call(sims)
+    ofit <- oumua_call(sims)
+    
+    # compute MSE and return
+    mse <- function(fit){
+      yhat <- predict(fit, newdata = test_dat)
+      mean((test_dat$y - yhat)^2)
+    }
+    
+    c(earth = mse(efit), oumua = mse(ofit))
+  })
+})
+```
+
+```{r show_dum_sim}
+# stats for mean square error
+names(res) <- N
+lapply(res, function(x) apply(x, 1, function(z) 
+  c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
+```
+
+```{r dum_runtimes, cache = 1, dependson = "dum_sim"}
+factor_runtimes <- local({
+  run_dat <- factor_sim(10000, 10)  
+  microbenchmark(
+    earth = earth_call(run_dat), oumua = oumua_call(run_dat), 
+    times = 10)
+})
+```
+
+```{r show_dum_runtimes}
+factor_runtimes
+```
+
