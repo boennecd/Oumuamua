@@ -66,7 +66,6 @@ struct omua_res {
  * Args:
  *   X: matrix with covariates.
  *   Y: vector with outcomes.
- *   W: vector with positive case weights.
  *   lambda: L2 penalty parameter.
  *   endspan: minmum number of observations between the first observation and
  *   the first knot and similarly for the last knot and the last observation.
@@ -78,11 +77,12 @@ struct omua_res {
  *   trace: integer where zero yields no information and higher values yields
  *   more information.
  *   thresh: threshold for minimum R^2 improvment.
+ *   n_threads: number of threads to use.
  */
 omua_res omua
-  (const arma::mat &X, const arma::vec &Y, const arma::vec &W,
+  (const arma::mat &X, const arma::vec &Y,
    const double lambda, const unsigned endspan, const unsigned minspan,
    const unsigned degree, const unsigned nk, const double penalty,
-   const unsigned trace, const double thresh);
+   const unsigned trace, const double thresh, const unsigned n_threads);
 
 #endif

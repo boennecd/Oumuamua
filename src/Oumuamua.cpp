@@ -8,6 +8,7 @@
 #include <algorithm>
 #include "miscellaneous.h"
 #include "print.h"
+#include "thread_pool.h"
 
 using std::size_t;
 using std::to_string;
@@ -24,8 +25,7 @@ namespace {
   /* class to hold data to pass around */
   struct problem_data {
     const arma::mat X;
-    const arma::vec wY;
-    const arma::vec W;
+    const arma::vec Y;
     const std::vector<sort_keys> keys;
     const unsigned endspan;
     const unsigned minspan;
@@ -108,7 +108,7 @@ namespace {
     /* current centered design matrix */
     const arma::mat &cur_design_mat;
     /* current root nodes */
-    std::vector<std::unique_ptr<cov_node> > &root_childrens;
+    const std::vector<std::unique_ptr<cov_node> > &root_childrens;
 
     worker_res operator()() const {
       worker_res out;
@@ -125,7 +125,7 @@ namespace {
         return out;
       }
 
-      const arma::vec &y = dat.wY;
+      const arma::vec &y = dat.Y;
       const arma::mat &B = cur_design_mat;
 
       if(knots.n_unique < 3L or knots.knots.n_elem < 1L){
@@ -197,7 +197,7 @@ namespace {
         return out;
       }
 
-      const arma::vec &y = dat.wY,
+      const arma::vec &y = dat.Y,
             &parent_use = parent;
       const arma::mat &B = cur_design_mat;
       if(knots.n_unique < 3L or knots.knots.n_elem < 1L){
@@ -315,10 +315,10 @@ inline std::map<unsigned, const cov_node*> get_order_to_idx
 }
 
 omua_res omua
-  (const arma::mat &X, const arma::vec &Y, const arma::vec &W,
+  (const arma::mat &X, const arma::vec &Y,
    const double lambda, const unsigned endspan, const unsigned minspan,
    const unsigned degree, const unsigned nk, const double penalty,
-   const unsigned trace, const double thresh){
+   const unsigned trace, const double thresh, const unsigned n_threads){
   if(trace > 0)
     Oout << "Starting model estimation\n";
 
@@ -329,8 +329,8 @@ omua_res omua
     auto throw_err = [](const std::string &msg){
       throw std::invalid_argument("'omua_res': " + msg);
     };
-    if(Y.n_elem != N or W.n_elem != N)
-      throw_err("invalid 'Y' or W");
+    if(Y.n_elem != N)
+      throw_err("invalid 'Y'");
     if(degree < 1L)
       throw_err("invalid 'degree'");
     if(nk < 2L)
@@ -349,9 +349,11 @@ omua_res omua
   /* output */
   omua_res out;
 
+  thread_pool pool(n_threads);
+
   /* set problem data object to use */
   const problem_data dat = ([&]{
-    XY_dat dat(Y, X, W);
+    XY_dat dat(Y, X);
     out.X_scales = dat.X_scales.t();
     out.X_means = dat.X_means.t();
     out.y_mean = dat.y_mean;
@@ -368,7 +370,7 @@ omua_res omua
 
     arma::inplace_trans(dat.sc_X);
     return problem_data
-      { std::move(dat.sc_X), std::move(dat.c_W_y), W, std::move(keys),
+      { std::move(dat.sc_X), std::move(dat.c_y), std::move(keys),
         endspan, minspan, lambda, X.n_rows };
   })();
 
@@ -389,18 +391,25 @@ omua_res omua
   arma::mat design_mat(nk, N, arma::fill::zeros);
 
   /* variance of Y */
-  const double dN = (double)dat.N, Y_var = arma::dot(dat.wY, dat.wY) / dN;
+  const double dN = (double)dat.N, Y_var = arma::dot(dat.Y, dat.Y) / dN;
 
   /* normal equation object we update */
   normal_equation eq;
 
   /* forward pass */
-  std::vector<worker_res> results;
   {
     if(trace > 0)
       Oout << "Running foward pass\n";
 
-    results.reserve((int)(nk * 1.5 * X.n_cols)); /* TODO: find better value? */
+    std::vector<worker_res> results;
+    std::vector<std::future<worker_res> > futures;
+    {
+      /* TODO: find better value? */
+      const unsigned max_tasks = nk * X.n_cols;
+      results.reserve(max_tasks);
+      futures.reserve(max_tasks);
+    }
+
     unsigned it = 0L;
     double old_Rsq = 0.;
     struct gcv gcv_comp { dN, Y_var, penalty, n_terms };
@@ -408,6 +417,12 @@ omua_res omua
     while(n_terms + 2L <= nk){
       if(gcv_comp.get_complexity(2L) >= dN)
         break;
+
+#ifdef IS_R_BUILD
+      if(it % 8 == 0)
+        Rcpp::checkUserInterrupt();
+#endif
+
       it++;
 
       /* current centered design matrix.
@@ -420,10 +435,11 @@ omua_res omua
 
       /* check root children */
       results.clear();
+      futures.clear();
       for(auto i : active_root_covs){
         root_worker task { dat, i, root_parent, eq, cur_design_mat,
                            root_childrens };
-        results.push_back(task());
+        futures.push_back(pool.submit(std::move(task)));
       }
 
       if(degree > 1L){
@@ -436,7 +452,7 @@ omua_res omua
             for(auto i : active_covs){
               non_root_worker task {
                 dat, i, node->x, eq, node, cur_design_mat };
-              results.push_back(task());
+              futures.push_back(pool.submit(std::move(task)));
             }
 
             for(auto &x : node->children)
@@ -447,6 +463,10 @@ omua_res omua
           add_tasks((extended_cov_node *)r.get());
 
       }
+
+      /* gather results */
+      for(auto &f : futures)
+        results.push_back(f.get());
 
       /* find best new term */
       worker_res * best;
@@ -524,7 +544,7 @@ omua_res omua
 
           /* update normal equation */
           arma::vec k(1);
-          k.at(0) = arma::dot(design_mat.row(desg_indx), dat.wY);
+          k.at(0) = arma::dot(design_mat.row(desg_indx), dat.Y);
           center_cov(design_mat, desg_indx, transpose);
           arma::mat V =
             design_mat.rows(0, desg_indx) * design_mat.row(desg_indx).t();
@@ -578,7 +598,7 @@ omua_res omua
 
         /* update normal equation */
         arma::vec k(1);
-        k.at(0) = arma::dot(design_mat.row(desg_indx), dat.wY);
+        k.at(0) = arma::dot(design_mat.row(desg_indx), dat.Y);
         center_cov(design_mat, desg_indx, transpose);
         arma::mat V =
           design_mat.rows(0, desg_indx) * design_mat.row(desg_indx).t();

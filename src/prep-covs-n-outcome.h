@@ -10,8 +10,8 @@ struct XY_dat {
   const arma::vec &y;
   const arma::mat &X;
 
-  /* centered weighted outcomes and scaled and centered covariates */
-  arma::vec c_W_y;
+  /* centered outcomes and scaled and centered covariates */
+  arma::vec c_y;
   arma::mat sc_X;
   arma::rowvec X_means;
   arma::rowvec X_scales;
@@ -20,9 +20,8 @@ struct XY_dat {
   /* Args:
    *   1: outcomes.
    *   2: covariates.
-   *   3: weights.
    */
-  XY_dat(const arma::vec&, const arma::mat&, arma::vec);
+  XY_dat(const arma::vec&, const arma::mat&);
 };
 
 void standardize(arma::mat&, const arma::rowvec&, const arma::rowvec&);

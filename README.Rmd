@@ -65,11 +65,11 @@ earth_call <- function(sims){
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
         endspan = spans["endspan"], degree = 1, penalty = 2)
 }
-oumua_call <- function(sims){
+oumua_call <- function(sims, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 1L, 
-    penalty = 2, lambda = 1))
+    penalty = 2, lambda = 1, n_threads = n_threads))
 }
 
 # run simulations
@@ -113,7 +113,9 @@ set.seed(17039344)
 addi_runtimes <- local({
   run_dat <- additiv_sim(10000, 10)  
   microbenchmark(
-    earth = earth_call(run_dat), oumua = oumua_call(run_dat), 
+    earth = earth_call(run_dat), 
+    `oumua (1 thread) ` = oumua_call(run_dat, n_threads = 1L),
+    `oumua (5 threads)` = oumua_call(run_dat, n_threads = 5L),
     times = 100)
 })
 ```
@@ -142,11 +144,11 @@ earth_call <- function(sims){
         endspan = spans["endspan"], degree = 3, penalty = 3, nk = 30, 
         fast.k = 0)
 }
-oumua_call <- function(sims){
+oumua_call <- function(sims, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, nk = 30L, lambda = 1))
+    penalty = 3, nk = 30L, lambda = 1, n_threads = n_threads))
 }
 
 # run simulations
@@ -186,7 +188,9 @@ set.seed(17039344)
 inter_runtimes <- local({
   run_dat <- interact_sim(10000, 10)  
   microbenchmark(
-    earth = earth_call(run_dat), oumua = oumua_call(run_dat), 
+    earth = earth_call(run_dat), 
+    `oumua (1 thread) ` = oumua_call(run_dat, n_threads = 1L),
+    `oumua (5 threads)` = oumua_call(run_dat, n_threads = 5L),
     times = 10)
 })
 ```
@@ -220,11 +224,11 @@ earth_call <- function(sims){
         endspan = spans["endspan"], degree = 3, penalty = 3, nk = 30, 
         fast.k = 0, fast.beta = 0)
 }
-oumua_call <- function(sims, lambda = 1){
+oumua_call <- function(sims, lambda = 1, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, lambda = lambda, nk = 30L))
+    penalty = 3, lambda = lambda, nk = 30L, n_threads = n_threads))
 }
 
 # run simulations
@@ -264,7 +268,9 @@ set.seed(17039344)
 factor_runtimes <- local({
   run_dat <- factor_sim(10000, 10)  
   microbenchmark(
-    earth = earth_call(run_dat), oumua = oumua_call(run_dat), 
+    earth = earth_call(run_dat), 
+    `oumua (1 thread) ` = oumua_call(run_dat, n_threads = 1L),
+    `oumua (5 threads)` = oumua_call(run_dat, n_threads = 5L),
     times = 10)
 })
 ```
@@ -278,7 +284,9 @@ set.seed(17039344)
 factor_runtimes <- local({
   run_dat <- factor_sim(10000, 10)  
   microbenchmark(
-    earth = earth_call(run_dat), oumua = oumua_call(run_dat, lambda = 0), 
+    earth = earth_call(run_dat), 
+    `oumua (1 thread) ` = oumua_call(run_dat, n_threads = 1L, lambda = 0),
+    `oumua (5 threads)` = oumua_call(run_dat, n_threads = 5L, lambda = 0),
     times = 10)
 })
 ```

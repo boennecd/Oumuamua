@@ -37,10 +37,6 @@ test_that("Get the same with model with interactions", {
     c("coefficients", "backward_stats")], "interact-plain-coef.RDS")
 
   #####
-  # with weights
-  expect_true(FALSE)
-
-  #####
   # with different minspan and endspan
   fit <- oumua(y ~ ., dat, control = oumua.control(
     nk = 30L, penalty = 2L, lambda = 10, endspan = 30L, minspan = 30L,
@@ -48,6 +44,21 @@ test_that("Get the same with model with interactions", {
   expect_s3_class(fit, "oumua")
   expect_known_value(fit[
     c("coefficients", "backward_stats")], "interact-plain-large-span.RDS")
+
+  #####
+  # gets the same with more threads
+  f_more <- oumua(y ~ ., dat, control = oumua.control(
+    nk = 30L, penalty = 2L, lambda = 10, endspan = 30L, minspan = 30L,
+    degree = 4L, n_threads = 2L))
+
+  keep <- !names(f_more) %in% c("control", "call")
+  expect_equal(fit[keep], f_more[keep])
+
+  skip_on_cran()
+  f_more <- oumua(y ~ ., dat, control = oumua.control(
+    nk = 30L, penalty = 2L, lambda = 10, endspan = 30L, minspan = 30L,
+    degree = 4L, n_threads = 4L))
+  expect_equal(fit[keep], f_more[keep])
 })
 
 test_that("Get the same with  model with interactions and dummies", {

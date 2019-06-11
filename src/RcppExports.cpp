@@ -7,14 +7,13 @@
 using namespace Rcpp;
 
 // omua_to_R
-Rcpp::List omua_to_R(const arma::mat& X, const arma::vec& Y, const arma::vec& W, const double lambda, const unsigned endspan, const unsigned minspan, const unsigned degree, const unsigned nk, const double penalty, const unsigned trace, const double thresh);
-RcppExport SEXP _Oumuamua_omua_to_R(SEXP XSEXP, SEXP YSEXP, SEXP WSEXP, SEXP lambdaSEXP, SEXP endspanSEXP, SEXP minspanSEXP, SEXP degreeSEXP, SEXP nkSEXP, SEXP penaltySEXP, SEXP traceSEXP, SEXP threshSEXP) {
+Rcpp::List omua_to_R(const arma::mat& X, const arma::vec& Y, const double lambda, const unsigned endspan, const unsigned minspan, const unsigned degree, const unsigned nk, const double penalty, const unsigned trace, const double thresh, const unsigned n_threads);
+RcppExport SEXP _Oumuamua_omua_to_R(SEXP XSEXP, SEXP YSEXP, SEXP lambdaSEXP, SEXP endspanSEXP, SEXP minspanSEXP, SEXP degreeSEXP, SEXP nkSEXP, SEXP penaltySEXP, SEXP traceSEXP, SEXP threshSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type Y(YSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type W(WSEXP);
     Rcpp::traits::input_parameter< const double >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< const unsigned >::type endspan(endspanSEXP);
     Rcpp::traits::input_parameter< const unsigned >::type minspan(minspanSEXP);
@@ -23,7 +22,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type penalty(penaltySEXP);
     Rcpp::traits::input_parameter< const unsigned >::type trace(traceSEXP);
     Rcpp::traits::input_parameter< const double >::type thresh(threshSEXP);
-    rcpp_result_gen = Rcpp::wrap(omua_to_R(X, Y, W, lambda, endspan, minspan, degree, nk, penalty, trace, thresh));
+    Rcpp::traits::input_parameter< const unsigned >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(omua_to_R(X, Y, lambda, endspan, minspan, degree, nk, penalty, trace, thresh, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }

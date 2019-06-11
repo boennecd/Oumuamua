@@ -1,6 +1,6 @@
-#' @importFrom stats model.response model.matrix model.offset model.weights model.frame
+#' @importFrom stats model.response model.matrix model.offset model.frame
 #' @export
-oumua <- function(formula, data, weights, offset, control = oumua.control()){
+oumua <- function(formula, data, offset, control = oumua.control()){
   # checks
   stopifnot(
     inherits(formula, "formula"), is.environment(data) || is.data.frame(data))
@@ -8,7 +8,7 @@ oumua <- function(formula, data, weights, offset, control = oumua.control()){
   # setup. First get model frame
   cl <- match.call()
   mf <- match.call(expand.dots = FALSE)
-  m <- match(c("formula", "data", "weights", "offset"), names(mf), 0L)
+  m <- match(c("formula", "data", "offset"), names(mf), 0L)
   mf <- mf[c(1L, m)]
   mf$drop.unused.levels <- TRUE
   mf[[1L]] <- quote(stats::model.frame)
@@ -19,12 +19,11 @@ oumua <- function(formula, data, weights, offset, control = oumua.control()){
   attr(tr, "intercept") <- 0
   y <- model.response(mf, "numeric")
   x <- model.matrix(tr, mf)
-  weights <- model.weights(mf)
   offset <- model.offset(mf)
 
   # fit model
   out <- oumua.fit(
-    x = x, y = y, offset = offset, weights = weights, control = control)
+    x = x, y = y, offset = offset, control = control)
   out[c("call", "terms")] <- list(cl, tr)
   class(out) <- "oumua"
   out
@@ -67,18 +66,15 @@ print.summary.oumua <- function(x, digits = 3, ...){
 }
 
 #' @export
-oumua.fit <- function(x, y, offset = NULL, weights = NULL, do_check = TRUE,
+oumua.fit <- function(x, y, offset = NULL, do_check = TRUE,
                       control = oumua.control()){
   N <- NROW(x)
   if(do_check)
     stopifnot(
-      is.matrix(x), is.vector(y), length(y) == N, is.null(offset) || (
-        is.numeric(offset) && length(offset) == N), is.null(weights) || (
-          is.numeric(weights) && length(weights) == N), is.list(control))
+      is.matrix(x), is.vector(y), length(y) == N,
+      is.null(offset) || (is.numeric(offset) && length(offset) == N))
   if(!is.null(offset))
     y <- y - offset
-  if(is.null(weights))
-    weights <- rep(1, N)
   control <- do.call(oumua.control, control)
 
   endspan <- if(is.na(control$endspan))
@@ -88,24 +84,21 @@ oumua.fit <- function(x, y, offset = NULL, weights = NULL, do_check = TRUE,
 
   # form tree
   fit <- omua_to_R(
-    X = x, Y = y, W = weights, lambda = control$lambda, endspan = endspan,
+    X = x, Y = y, lambda = control$lambda, endspan = endspan,
     minspan = minspan, degree = control$degree, nk = control$nk,
     penalty = control$penalty, trace = control$trace,
-    thresh = control$thresh)
+    thresh = control$thresh, n_threads = control$n_threads)
   fit$drop_order <- drop(fit$drop_order)
   fit$backward_stats <- lapply(fit$backward_stats, drop)
   fit$Y <- y
-  fit$W <- weights
   fit$control <- control
 
   # find coefficients for selected model
-  sqrt_w <- sqrt(weights)
   idx_obs <- seq_along(y)
-  wX <- fit$X
-  wX[idx_obs, ] <- wX[idx_obs, ] * sqrt_w
-  wy <- c(y * sqrt_w, rep(0, NCOL(wX) - 1))
-  Qo <- qr(wX, LAPACK = TRUE)
-  fit$coefficients <- drop(backsolve(qr.R(Qo),  qr.qty(Qo, wy)[1:NCOL(wX)]))
+  fX <- fit$X
+  ey <- c(y, rep(0, NCOL(fX) - 1))
+  Qo <- qr(fX, LAPACK = TRUE)
+  fit$coefficients <- drop(backsolve(qr.R(Qo),  qr.qty(Qo, ey)[1:NCOL(fX)]))
 
   # account for pivoting
   idx <- Qo$pivot
@@ -187,7 +180,8 @@ print.ouNode <- function(x, ...)
 #' @export
 oumua.control <- function(
   lambda = 1e-8, endspan = NA_integer_, minspan = NA_integer_, degree = 1L,
-  nk = 20L, penalty = if(degree > 1) 3 else 2, trace = 0L, thresh = .001){
+  nk = 20L, penalty = if(degree > 1) 3 else 2, trace = 0L, thresh = .001,
+  n_threads = 1){
   stopifnot(
     is.numeric(lambda), length(lambda) == 1, lambda >= 0,
     is.integer(endspan), length(endspan) == 1, endspan > 0 || is.na(endspan),
@@ -196,10 +190,12 @@ oumua.control <- function(
     is.integer(nk), length(nk) == 1, nk > 1,
     is.numeric(penalty), length(penalty) == 1, penalty > 0,
     is.integer(trace), length(trace) == 1, trace > -1,
-    is.numeric(thresh), length(thresh) == 1, thresh > 0)
+    is.numeric(thresh), length(thresh) == 1, thresh > 0,
+    is.numeric(n_threads), length(n_threads) == 1, n_threads >= 1L)
 
   list(lambda = lambda, endspan = endspan, minspan = minspan, degree = degree,
-       nk = nk, penalty = penalty, trace = trace, thresh = thresh)
+       nk = nk, penalty = penalty, trace = trace, thresh = thresh,
+       n_threads = n_threads)
 }
 
 #' @export

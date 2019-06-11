@@ -10,16 +10,17 @@ using Rcpp::Named;
 
 // [[Rcpp::export]]
 Rcpp::List omua_to_R
-  (const arma::mat &X, const arma::vec &Y, const arma::vec &W,
-   const double lambda, const unsigned endspan, const unsigned minspan,
-   const unsigned degree, const unsigned nk, const double penalty,
-   const unsigned trace, const double thresh){
+  (const arma::mat &X, const arma::vec &Y, const double lambda,
+   const unsigned endspan, const unsigned minspan, const unsigned degree,
+   const unsigned nk, const double penalty, const unsigned trace,
+   const double thresh, const unsigned n_threads){
 #ifdef OUMU_PROF
   profiler profiler("omua_to_R");
 #endif
 
   auto comp_out = omua(
-    X, Y, W, lambda, endspan, minspan, degree, nk, penalty, trace, thresh);
+    X, Y, lambda, endspan, minspan, degree, nk, penalty, trace, thresh,
+    n_threads);
 
   Rcpp::List out;
   /* find the number of variables to use and create the design matrix */
