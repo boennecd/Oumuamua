@@ -1,0 +1,13 @@
+
+Call:
+oumua(formula = mpg ~ cyl + disp + hp + drat + wt, data = mtcars, 
+    control = oumua.control(lambda = 1, endspan = 1L, minspan = 1L, 
+        degree = 2, n_threads = 1))
+
+Including 1 of 6 terms after the backward pass
+
+                     coefficients
+(Intercept)                 15.87
+h((-wt+3.57)/0.9785)         7.33
+
+R^2 is 0.776

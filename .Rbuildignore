@@ -1,3 +1,8 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^\.sandbox\.R$
 ^README\.Rmd$
+^README\.bib$
+^TODO$
+^README_cache
+^vignettes
