@@ -37,6 +37,16 @@ context("Testing chol decomposition") {
       std::array<double, 2L> expect { -0.394, 0.048 };
 
       expect_true(is_all_aprx_equal(o, expect));
+
+      /* check 'solve_half' */
+      arma::vec half_solve = x;
+      C.solve_half(half_solve);
+      C.solve_half(half_solve, no_transpose);
+      expect_true(is_all_aprx_equal(half_solve, expect));
+
+      arma::vec half_solve_2 = C.solve_half(x);
+      C.solve_half(half_solve_2, no_transpose);
+      expect_true(is_all_aprx_equal(half_solve_2, expect));
     }
   }
 

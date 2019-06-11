@@ -42,6 +42,26 @@ arma::vec chol_decomp::solve(const arma::vec &x) const {
   return out;
 }
 
+void chol_decomp::solve_half
+  (arma::vec &out, const transpose_arg trans) const {
+#ifdef OUMU_DEBUG
+  if(out.n_elem < chol_.n_cols)
+    throw invalid_argument("too small 'out' in 'chol_decomp::solve'");
+#endif
+  const char trans_arg = trans == transpose ? 'T' : 'N';
+  const int m = chol_.n_cols, ldb = out.n_elem;
+  F77_CALL(dtrsm)(
+      &C_L, &C_U, &trans_arg, &C_N, &m, &I_ONE, &D_ONE, chol_.begin(), &m,
+      out.memptr(), &ldb);
+}
+
+arma::vec chol_decomp::solve_half
+  (const arma::vec &Z, const transpose_arg trans) const {
+  arma::vec out = Z;
+  solve_half(out);
+  return out;
+}
+
 void chol_decomp::update_sub(const arma::mat &V){
   const int p = V.n_rows, n = p - V.n_cols;
 #ifdef OUMU_DEBUG

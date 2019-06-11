@@ -189,7 +189,7 @@ oumua.control <- function(
   lambda = 1e-8, endspan = NA_integer_, minspan = NA_integer_, degree = 1L,
   nk = 20L, penalty = if(degree > 1) 3 else 2, trace = 0L, thresh = .001){
   stopifnot(
-    is.numeric(lambda), length(lambda) == 1, lambda > 0,
+    is.numeric(lambda), length(lambda) == 1, lambda >= 0,
     is.integer(endspan), length(endspan) == 1, endspan > 0 || is.na(endspan),
     is.integer(minspan), length(minspan) == 1, minspan > 0 || is.na(minspan),
     is.integer(minspan), length(minspan) == 1, degree > 0,

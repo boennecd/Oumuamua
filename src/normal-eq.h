@@ -12,6 +12,33 @@ class normal_equation {
   /* vector on right-hand-side of normal equation */
   arma::vec z = arma::vec();
 
+  /* to avoid computation of sum of squares */
+  struct half_solve_z_obj {
+    arma::vec half_solve = arma::vec();
+    double ss = 0.;
+
+    half_solve_z_obj() = default;
+    half_solve_z_obj(const arma::vec &z, const chol_decomp &C):
+      half_solve(([&]{
+        arma::vec out = z;
+        C.solve_half(out, transpose);
+        return out;
+      })()), ss(arma::dot(half_solve, half_solve)) { }
+  };
+
+  bool is_half_solve_set = false;
+  half_solve_z_obj half_solve_z_;
+
+  /* returns R^{-T}z */
+  const half_solve_z_obj& get_half_solve_z(){
+    if(!is_half_solve_set){
+      half_solve_z_ = half_solve_z_obj(z, C);
+      is_half_solve_set = true;
+    }
+
+    return half_solve_z_;
+  }
+
 public:
   /* Setup normal equation for Kx = z */
   normal_equation(const arma::mat &K, const arma::vec &z):
@@ -37,6 +64,7 @@ public:
 #endif
     resize(V.n_rows);
     update_sub(V, k);
+    is_half_solve_set = false;
   }
 
   /* same as above but updates last p parts */
@@ -51,16 +79,77 @@ public:
 #endif
     z.subvec(z.n_elem - V.n_cols, z.n_elem - 1) = k;
     C.update_sub(V);
+    is_half_solve_set = false;
   }
 
   void resize(const unsigned new_dim){
     z.reshape(new_dim, 1);
     C.resize(new_dim);
+    is_half_solve_set = false;
   }
 
+  /* returns the solution to the normal equation */
   arma::vec get_coef() const {
     return C.solve(z);
   }
+
+  /* returns -(z^TK^{-1}z + lambda |coef|_2)*/
+  double get_RSS_diff(const double lambda) const {
+    if(z.n_elem == 0)
+      return 0.;
+    arma::vec tmp = z;
+    C.solve_half(tmp);
+    double out = arma::dot(tmp, tmp);
+    if(lambda == 0)
+      return -out;
+
+    C.solve_half(tmp, no_transpose);
+    return -out - lambda * arma::dot(tmp, tmp);
+  }
+
+  /* same as above but by passing a one-dimensional k and single
+   * column V = | V_1^T V_2 |^t and working memory matrix with dimension
+   * equal to the number of rows of V and two columns.
+   *
+   * The majority of the computation time of the program is spend here so this
+   * needs to be fast.
+   */
+  double get_RSS_diff
+    (const double lambda, const double k, const arma::mat &V,
+     arma::mat &work_mem){
+#ifdef OUMU_DEBUG
+    if(V.n_cols != 1 or V.n_rows != z.n_elem + 1)
+      throw std::invalid_argument("'get_RSS_diff': invalid 'V'");
+    if(V.n_rows != work_mem.n_rows or work_mem.n_cols < 2)
+      throw std::invalid_argument("'get_RSS_diff': invalid 'work_mem'");
+    if(V.n_rows == 1)
+      throw std::runtime_error("not implemented with empty 'normal_equation'");
+#endif
+    const unsigned m = z.n_elem;
+    const arma::span old_ele(0, m - 1);
+    const half_solve_z_obj &z_half = get_half_solve_z();
+
+    /* compute the new column of V */
+    arma::vec C_new_col(work_mem.memptr() , m + 1, false),
+              z_new    (work_mem.colptr(1), m + 1, false);
+    C_new_col = V.col(0);
+    C.solve_half(C_new_col, transpose);
+    C_new_col.at(m) = std::sqrt(
+      V.at(m, 0) - arma::dot(C_new_col(old_ele), C_new_col(old_ele)));
+    z_new.at(m) = (k - arma::dot(C_new_col(old_ele), z_half.half_solve)) /
+      C_new_col.at(m);
+
+    double out = -(z_new.at(m) * z_new.at(m) + z_half.ss);
+    if(lambda == 0)
+      return out;
+
+    /* back substitution to get the coefficients */
+    z_new.at(m) /= C_new_col.at(m);
+    z_new(old_ele) = z_half.half_solve - z_new.at(m) * C_new_col(old_ele);
+    C.solve_half(z_new, no_transpose);
+    out -= lambda * arma::dot(z_new, z_new);
+    return out;
+  };
 
   const arma::vec& get_rhs() const {
     return z;

@@ -1,6 +1,7 @@
 #ifndef CHOL_H
 #define CHOL
 #include "arma.h"
+#include "miscellaneous.h"
 
 class chol_decomp {
 private:
@@ -15,6 +16,12 @@ public:
   /* Return X^{-1}Z */
   void solve(arma::vec&) const;
   arma::vec solve(const arma::vec&) const;
+
+  /* Returns R^{-T}Z or R^{-1}Z */
+  void solve_half
+    (arma::vec&, const transpose_arg trans = transpose) const;
+  arma::vec solve_half
+    (const arma::vec&, const transpose_arg trans = transpose) const;
 
   /* Update the Cholesky decomposition from X = R^TR to K = C^TC where
    *   K = | X     V_1 |

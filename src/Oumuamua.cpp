@@ -133,7 +133,7 @@ namespace {
         out.res = only_linear;
         auto lin_res = add_linear_term
           (old_eq, x, y, parent, B, dat.lambda, dat.N, key.order());
-        out.min_se_less_var = get_min_se_less_var(lin_res.new_eq, dat.lambda);
+        out.min_se_less_var = lin_res.new_eq.get_RSS_diff(dat.lambda);
         return out;
       }
 
@@ -205,7 +205,7 @@ namespace {
         out.res = only_linear;
         auto lin_res = add_linear_term
           (old_eq, x, y, parent_use, B, dat.lambda, dat.N, key.order());
-        out.min_se_less_var = get_min_se_less_var(lin_res.new_eq, dat.lambda);
+        out.min_se_less_var = lin_res.new_eq.get_RSS_diff(dat.lambda);
         return out;
       }
 
@@ -588,7 +588,7 @@ omua_res omua
       } else
         throw std::runtime_error("unsupported 'res_type'");
 
-      auto stats = gcv_comp(get_min_se_less_var(eq, dat.lambda), 0L);
+      auto stats = gcv_comp(eq.get_RSS_diff(dat.lambda), 0L);
       if(trace > 0){
         OPRINTF("Ended iteration %4d: GCV, R^2, # terms: %14.4f, %14.4f, %4d\n",
                 it, stats.gcv, stats.Rsq, eq.n_elem());
@@ -624,7 +624,9 @@ omua_res omua
   /* backward pass */
   arma::uvec &drop_order = out.drop_order;
   arma::vec &R2sq = out.backward_stats[0], &GCVs = out.backward_stats[1];
+#ifdef OUMU_DEBUG
   std::vector<arma::vec> &coefs = out.coefs;
+#endif
   {
     if(trace > 0)
       Oout << "Running backward pass\n";
@@ -643,12 +645,14 @@ omua_res omua
     const unsigned n_terms_dummy = 0L;
     struct gcv gcv_comp { dN, Y_var, penalty, n_terms_dummy };
     auto get_gcv = [&](const normal_equation &mod){
-      return gcv_comp(get_min_se_less_var(mod, dat.lambda), mod.n_elem());
+      return gcv_comp(mod.get_RSS_diff(dat.lambda), mod.n_elem());
     };
 
     /* set values with all terms */
+#ifdef OUMU_DEBUG
     coefs.reserve(n_terms);
     coefs.emplace_back(working_model.get_coef());
+#endif
     {
       auto stats = get_gcv(working_model);
       R2sq.at(0) = stats.Rsq;
@@ -702,11 +706,11 @@ omua_res omua
       remaning.erase(remaning.begin() + idx_to_drop);
       auto new_stats = get_gcv(working_model);
 
-      coefs.emplace_back(working_model.get_coef());
       R2sq.at(i) = new_stats.Rsq;
       GCVs.at(i) = new_stats.gcv;
 
 #ifdef OUMU_DEBUG
+      coefs.emplace_back(working_model.get_coef());
       if(max_stats.gcv - new_stats.gcv  != 0)
         throw std::runtime_error("GCV do not match after removal");
 #endif

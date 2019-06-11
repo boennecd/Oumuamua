@@ -149,13 +149,14 @@ new_node_res get_new_node
 
   } else
     problem_to_update = old_problem;
-  problem_to_update.resize(problem_to_update.n_elem() + 1);
   /* TODO: delete */
   const arma::vec x_cen = x % parent - x_parent_mean;
 
   /* prep for going through knot */
-  arma::mat V(p + 1L + !one_hinge, 1L, arma::fill::zeros);
-  arma::vec k(1L, arma::fill::zeros);
+  const unsigned int V_dim = p + 1L + !one_hinge;
+  arma::mat V(V_dim, 1L, arma::fill::zeros),
+     work_mem(V_dim, 2L, arma::fill::zeros);
+  double k = 0;
 
   /* handle penalty term for hinge function */
   V(idx_last_term, 0L) = lambda;
@@ -186,7 +187,7 @@ new_node_res get_new_node
 
     /* make update on active observations */
     const double knot_diff = knot_old - *knot;
-    k.at(0L) += knot_diff * grad_term_old;
+    k += knot_diff * grad_term_old;
     if(!fresh)
       F77_CALL(daxpy)(
           &m_B, &knot_diff, V_old_h.memptr(), &I_ONE, V.memptr(), &I_ONE);
@@ -210,7 +211,7 @@ new_node_res get_new_node
 
       /* make update for *new* active observations */
       {
-        k.at(0) += y_i * par_x_less_knot;
+        k += y_i * par_x_less_knot;
 
         if(!fresh)
           F77_CALL(daxpy)(
@@ -244,8 +245,7 @@ new_node_res get_new_node
     su = sl;
 
     /* update solution */
-    problem_to_update.update_sub(V, k);
-    const double se = get_min_se_less_var(problem_to_update, lambda);
+    const double se = problem_to_update.get_RSS_diff(lambda, k, V, work_mem);
 #ifdef OUMU_DEBUG
     if(std::isnan(se))
       throw std::runtime_error("'se' nan");

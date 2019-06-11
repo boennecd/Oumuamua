@@ -12,19 +12,6 @@ struct new_node_res {
   double knot = std::numeric_limits<double>::quiet_NaN();
 };
 
-inline double get_min_se_less_var
-  (const normal_equation &eq, const double lambda){
-  if(eq.n_elem() == 0L)
-    return 0.;
-  const arma::vec coef = eq.get_coef(),
-                   rhs = eq.get_rhs();
-  double out = 0;
-  const double *r = rhs.begin();
-  for(auto x : coef)
-    out += x * (lambda * x + *r++);
-  return -out;
-}
-
 /* Find best knot position with smallest squared error given a new predictor
  * and a given parent node. It takes an old normal equation Kx = z and
  * recursively updates V = | V_1^T V_2^T |^T and k in

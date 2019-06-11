@@ -109,6 +109,7 @@ library(microbenchmark)
 ```
 
 ```{r addit_runtimes, cache = 1}
+set.seed(17039344)
 addi_runtimes <- local({
   run_dat <- additiv_sim(10000, 10)  
   microbenchmark(
@@ -181,6 +182,7 @@ lapply(res, function(x) apply(x, 1, function(z)
 ```
 
 ```{r interact_runtimes, cache = 1, dependson = "interact_sim"}
+set.seed(17039344)
 inter_runtimes <- local({
   run_dat <- interact_sim(10000, 10)  
   microbenchmark(
@@ -216,13 +218,13 @@ earth_call <- function(sims){
   spans <- get_spans(N = nrow(sims), p = p)
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
         endspan = spans["endspan"], degree = 3, penalty = 3, nk = 30, 
-        fast.k = 0)
+        fast.k = 0, fast.beta = 0)
 }
-oumua_call <- function(sims){
+oumua_call <- function(sims, lambda = 1){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, lambda = 1, nk = 30L))
+    penalty = 3, lambda = lambda, nk = 30L))
 }
 
 # run simulations
@@ -258,6 +260,7 @@ lapply(res, function(x) apply(x, 1, function(z)
 ```
 
 ```{r dum_runtimes, cache = 1, dependson = "dum_sim"}
+set.seed(17039344)
 factor_runtimes <- local({
   run_dat <- factor_sim(10000, 10)  
   microbenchmark(
@@ -270,3 +273,16 @@ factor_runtimes <- local({
 factor_runtimes
 ```
 
+```{r zero_lambda_dum_runtimes, cache = 1, dependson = "dum_sim"}
+set.seed(17039344)
+factor_runtimes <- local({
+  run_dat <- factor_sim(10000, 10)  
+  microbenchmark(
+    earth = earth_call(run_dat), oumua = oumua_call(run_dat, lambda = 0), 
+    times = 10)
+})
+```
+
+```{r zero_show_dum_runtimes}
+factor_runtimes
+```

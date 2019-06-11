@@ -112,6 +112,7 @@ library(microbenchmark)
 ```
 
 ``` r
+set.seed(17039344)
 addi_runtimes <- local({
   run_dat <- additiv_sim(10000, 10)  
   microbenchmark(
@@ -124,8 +125,8 @@ addi_runtimes <- local({
 addi_runtimes
 #> Unit: milliseconds
 #>   expr   min    lq  mean median    uq   max neval
-#>  earth 68.18 70.12 75.08  71.60 73.57 109.3   100
-#>  oumua 75.12 75.96 78.57  76.62 78.29 116.2   100
+#>  earth 58.76 60.31 63.91  61.16 62.53 91.40   100
+#>  oumua 56.55 57.79 59.72  58.51 59.52 87.23   100
 ```
 
 Interaction Example
@@ -203,6 +204,7 @@ lapply(res, function(x) apply(x, 1, function(z)
 ```
 
 ``` r
+set.seed(17039344)
 inter_runtimes <- local({
   run_dat <- interact_sim(10000, 10)  
   microbenchmark(
@@ -215,8 +217,8 @@ inter_runtimes <- local({
 inter_runtimes
 #> Unit: milliseconds
 #>   expr   min    lq  mean median    uq   max neval
-#>  earth 518.7 530.1 537.6  535.1 538.7 581.4    10
-#>  oumua 631.6 632.6 646.3  643.3 658.7 671.2    10
+#>  earth 510.4 513.9 523.4  518.9 532.2 549.4    10
+#>  oumua 754.8 755.6 759.4  756.4 761.7 772.4    10
 ```
 
 Interaction Example with Factor
@@ -243,13 +245,13 @@ earth_call <- function(sims){
   spans <- get_spans(N = nrow(sims), p = p)
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
         endspan = spans["endspan"], degree = 3, penalty = 3, nk = 30, 
-        fast.k = 0)
+        fast.k = 0, fast.beta = 0)
 }
-oumua_call <- function(sims){
+oumua_call <- function(sims, lambda = 1){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, lambda = 1, nk = 30L))
+    penalty = 3, lambda = lambda, nk = 30L))
 }
 
 # run simulations
@@ -299,6 +301,7 @@ lapply(res, function(x) apply(x, 1, function(z)
 ```
 
 ``` r
+set.seed(17039344)
 factor_runtimes <- local({
   run_dat <- factor_sim(10000, 10)  
   microbenchmark(
@@ -310,7 +313,25 @@ factor_runtimes <- local({
 ``` r
 factor_runtimes
 #> Unit: milliseconds
+#>   expr    min     lq mean median     uq  max neval
+#>  earth  922.4  952.9 1134  964.5  984.9 2647    10
+#>  oumua 1714.1 1723.1 2067 1784.1 1962.3 3994    10
+```
+
+``` r
+set.seed(17039344)
+factor_runtimes <- local({
+  run_dat <- factor_sim(10000, 10)  
+  microbenchmark(
+    earth = earth_call(run_dat), oumua = oumua_call(run_dat, lambda = 0), 
+    times = 10)
+})
+```
+
+``` r
+factor_runtimes
+#> Unit: milliseconds
 #>   expr    min     lq   mean median     uq    max neval
-#>  earth  914.7  916.5  931.2  925.8  945.8  958.6    10
-#>  oumua 1466.5 1469.2 1511.8 1475.9 1517.4 1720.0    10
+#>  earth  902.9  906.7  925.4  914.9  950.6  960.6    10
+#>  oumua 1019.1 1020.4 1047.4 1044.6 1069.4 1097.0    10
 ```
