@@ -196,14 +196,14 @@ Then we perform the simulation.
 earth_call <- function(sims){
   spans <- get_spans(N = nrow(sims), p = p)
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
-        endspan = spans["endspan"], degree = 3, penalty = 3, nk = 30, 
+        endspan = spans["endspan"], degree = 3, penalty = 3, nk = 50, 
         fast.k = 0)
 }
 oumua_call <- function(sims, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, nk = 30L, lambda = 1, n_threads = n_threads))
+    penalty = 3, nk = 50L, lambda = 1, n_threads = n_threads))
 }
 
 # run simulations
@@ -285,14 +285,14 @@ factor_sim <- function(N, p){
 earth_call <- function(sims){
   spans <- get_spans(N = nrow(sims), p = p)
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
-        endspan = spans["endspan"], degree = 3, penalty = 3, nk = 30, 
+        endspan = spans["endspan"], degree = 3, penalty = 3, nk = 50, 
         fast.k = 0, fast.beta = 0)
 }
 oumua_call <- function(sims, lambda = 1, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, lambda = lambda, nk = 30L, n_threads = n_threads))
+    penalty = 3, lambda = lambda, nk = 50L, n_threads = n_threads))
 }
 
 # run simulations
@@ -356,9 +356,11 @@ Some of the main differences between this package and the `earth` package is
  - the `earth` includes the suggestions in @Friedman93 to decrease the computation time. It would be nice to include these in this package. It only matters when there are many basis functions.
  - the `earth` package does not include an L2 penalty which simplifies  the computation of the generalized cross validation criterion at each knot. 
  - the `earth` package creates an orthogonal design matrix during the 
-   estimation (I think?) which allows one to skip some computations of the 
+   estimation which allows one (I think?) to skip some computations of the 
    generalized cross validation criterion (a "full" forward and backward
-   substitution).
+   substitution). Put differently, there are no forward or backward 
+   substitutions in the C function that finds the knots in the `earth` 
+   package.
 
 Some computation can be skipped if one sets `lambda` to zero (i.e., no L2 
 penalty). The following code blocks shows the impact. 
@@ -380,9 +382,8 @@ factor_runtimes
 ```
 
 Settings `lambda = 0` yields one less back substitution for each knot position. 
-Computing the orthogonal design matrix does come at a cost 
-but it does seem worth it even with few knots. 
-Though, I may though have misunderstood the C code in the `earth` package.
+However, this is not preferred as the implementation is not numerical stable 
+in some cases.
 
 A final issue that still needs to be addressed is the L2 penalty in this 
 package. When the knot position is found then the L2 penalty is applied to the 
