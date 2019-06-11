@@ -152,10 +152,10 @@ addi_runtimes <- local({
 ``` r
 addi_runtimes
 #> Unit: milliseconds
-#>               expr   min    lq  mean median    uq    max neval
-#>              earth 60.07 61.79 65.80  62.99 64.04 102.61   100
-#>  oumua (1 thread)  57.04 58.63 59.78  59.26 60.18  75.79   100
-#>  oumua (5 threads) 27.26 28.02 29.56  28.78 30.12  36.76   100
+#>               expr   min    lq  mean median    uq   max neval
+#>              earth 59.88 62.09 64.96  63.13 64.71 108.4   100
+#>  oumua (1 thread)  56.40 58.70 60.12  59.56 61.38  67.6   100
+#>  oumua (5 threads) 26.93 27.57 29.26  28.10 29.71  59.4   100
 ```
 
 Interaction Example
@@ -260,9 +260,9 @@ inter_runtimes <- local({
 inter_runtimes
 #> Unit: milliseconds
 #>               expr   min    lq  mean median    uq   max neval
-#>              earth 550.6 555.5 569.2  566.0 575.9 603.9    10
-#>  oumua (1 thread)  806.6 824.1 833.1  831.0 836.7 865.0    10
-#>  oumua (5 threads) 193.2 197.1 215.5  209.8 223.3 259.2    10
+#>              earth 536.0 540.0 552.5  546.0 566.5 577.8    10
+#>  oumua (1 thread)  810.1 815.1 823.6  825.4 828.5 836.3    10
+#>  oumua (5 threads) 200.9 206.2 213.2  209.2 211.2 241.6    10
 ```
 
 Interaction Example with Factor
@@ -366,9 +366,9 @@ factor_runtimes <- local({
 factor_runtimes
 #> Unit: milliseconds
 #>               expr    min     lq   mean median     uq    max neval
-#>              earth  963.1  992.2 1012.3 1002.6 1025.0 1072.4    10
-#>  oumua (1 thread)  1676.7 1716.6 1815.5 1791.9 1938.1 1990.6    10
-#>  oumua (5 threads)  469.2  540.5  565.5  571.8  587.5  641.7    10
+#>              earth  910.6  915.0  950.4  947.2  978.4 1000.0    10
+#>  oumua (1 thread)  1676.1 1687.4 1753.9 1715.0 1818.1 1897.2    10
+#>  oumua (5 threads)  412.2  437.7  459.3  442.8  462.1  582.7    10
 ```
 
 Comparison with the earth Package
@@ -399,10 +399,10 @@ factor_runtimes <- local({
 ``` r
 factor_runtimes
 #> Unit: milliseconds
-#>               expr    min     lq   mean median     uq    max neval
-#>              earth  927.5  981.9 1004.9  990.7 1011.3 1108.2    10
-#>  oumua (1 thread)  1080.6 1137.0 1185.4 1194.1 1204.8 1282.4    10
-#>  oumua (5 threads)  283.1  311.4  354.6  369.3  390.7  410.8    10
+#>               expr    min     lq   mean median     uq  max neval
+#>              earth  910.7  944.9  979.3  987.5 1015.3 1028    10
+#>  oumua (1 thread)  1037.9 1058.1 1083.0 1091.1 1098.5 1139    10
+#>  oumua (5 threads)  294.7  356.9  373.3  375.3  395.4  417    10
 ```
 
 Settings `lambda = 0` yields one less back substitution for each knot position. Computing the orthogonal design matrix does come at a cost but it does seem worth it even with few knots. Though, I may though have misunderstood the C code in the `earth` package.

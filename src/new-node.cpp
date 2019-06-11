@@ -148,8 +148,6 @@ new_node_res get_new_node
 
   } else
     problem_to_update = old_problem;
-  /* TODO: delete */
-  const arma::vec x_cen = x % parent - x_parent_mean;
 
   /* prep for going through knot */
   const unsigned int V_dim = p + 1L + !one_hinge;
@@ -229,7 +227,7 @@ new_node_res get_new_node
       grad_term_old += y_i * parent_i;
       if(!fresh)
         F77_CALL(daxpy)(
-          &m_B, parent.memptr() + *i, B.colptr(*i), &I_ONE, V_old_h.memptr(),
+          &m_B, &parent_i, B.colptr(*i), &I_ONE, V_old_h.memptr(),
           &I_ONE);
 
       if(!one_hinge)
