@@ -1,5 +1,5 @@
 #ifndef CHOL_H
-#define CHOL
+#define CHOL_H
 #include "arma.h"
 #include "miscellaneous.h"
 

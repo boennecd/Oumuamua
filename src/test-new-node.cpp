@@ -18,8 +18,8 @@ context("Testing 'get_new-node' and 'add_linear_term'") {
       x = R::rnorm(1, 1);
 
     arma::mat y(N, 1L);
-    for(auto &y : y)
-      y = R::rnorm(0, 1);
+    for(auto &yi : y)
+      yi = R::rnorm(0, 1);
 
     center_cov(y, 0L);
 

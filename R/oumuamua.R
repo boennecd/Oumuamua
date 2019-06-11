@@ -132,7 +132,7 @@ print.summary.oumua <- function(x, digits = 3, ...){
   colnames(m) <- "coefficients"
   print(m, digits = digits)
 
-  cat(sprintf("\nR^2 is %5.3f", x$Rsq))
+  cat(sprintf("\nR^2 is %5.3f\n", x$Rsq))
 
   invisible(x)
 }

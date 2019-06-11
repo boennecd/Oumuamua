@@ -45,7 +45,7 @@ $$y = 0.1 \exp 4 x_1 + \frac 4{1 + \exp-20(x_2 - 1/2)} + 3x_3 + 2x_4 + x_5 +
    \epsilon$$
    
 where $\epsilon$ follows a standard normal distribution and the $x_i$s are 
-uniformly distributed on $(0,1)$. Moreover, we let the $x_i$ be correlated 
+uniformly distributed on $(0,1)$. Moreover, we let the $x_i$s be correlated 
 and introduce a fixed number of noisy correlated variables. 
 
 We start by defining two function to simulate the covariates and outcomes. 

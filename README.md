@@ -21,7 +21,7 @@ We start of with a model with the additive model shown in Friedman (1991, 35). T
    \\epsilon](https://latex.codecogs.com/svg.latex?y%20%3D%200.1%20%5Cexp%204%20x_1%20%2B%20%5Cfrac%204%7B1%20%2B%20%5Cexp-20%28x_2%20-%201%2F2%29%7D%20%2B%203x_3%20%2B%202x_4%20%2B%20x_5%20%2B%20%0A%20%20%20%5Cepsilon "y = 0.1 \exp 4 x_1 + \frac 4{1 + \exp-20(x_2 - 1/2)} + 3x_3 + 2x_4 + x_5 + 
    \epsilon")
 
-where ![\\epsilon](https://latex.codecogs.com/svg.latex?%5Cepsilon "\epsilon") follows a standard normal distribution and the ![x\_i](https://latex.codecogs.com/svg.latex?x_i "x_i")s are uniformly distributed on ![(0,1)](https://latex.codecogs.com/svg.latex?%280%2C1%29 "(0,1)"). Moreover, we let the ![x\_i](https://latex.codecogs.com/svg.latex?x_i "x_i") be correlated and introduce a fixed number of noisy correlated variables.
+where ![\\epsilon](https://latex.codecogs.com/svg.latex?%5Cepsilon "\epsilon") follows a standard normal distribution and the ![x\_i](https://latex.codecogs.com/svg.latex?x_i "x_i")s are uniformly distributed on ![(0,1)](https://latex.codecogs.com/svg.latex?%280%2C1%29 "(0,1)"). Moreover, we let the ![x\_i](https://latex.codecogs.com/svg.latex?x_i "x_i")s be correlated and introduce a fixed number of noisy correlated variables.
 
 We start by defining two function to simulate the covariates and outcomes.
 
@@ -422,4 +422,4 @@ References
 
 Friedman, Jerome H. 1991. “Multivariate Adaptive Regression Splines.” *Ann. Statist.* 19 (1). The Institute of Mathematical Statistics: 1–67. <https://doi.org/10.1214/aos/1176347963>.
 
-———. 1993. “Multivariate Adaptive Regression Splines.” Technical Report 110. Stanford University Department of Statistics.
+———. 1993. “Fast Mars.” Technical Report 110. Stanford University Department of Statistics.
