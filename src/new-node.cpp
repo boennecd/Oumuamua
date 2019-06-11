@@ -72,7 +72,6 @@ add_linear_term_res add_linear_term
     old_problem, x, y, parent, B, lambda, N, "'add_linear_term': ",
     nullptr, false, indices);
 
-  const arma::span sold = get_sold(fresh, p);
   arma::mat V(p + 1L, 1L, arma::fill::zeros);
   arma::vec k(1L, arma::fill::zeros);
 

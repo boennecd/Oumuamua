@@ -204,7 +204,7 @@ $$
 $$
 
 if I am correct. This is small if lambda is large enough. Further, one needs 
-to solve many normal equation and quickly update the needed quantities to 
+to solve many normal equations and quickly update the needed quantities to 
 do the computation. The `get_basis` return the hinge 
 function and the covariate value as need in Equation (51) in @friedman91. 
 `update_normal_equation` makes the updates as in @friedman91 [pp. 29-30]. 
@@ -351,52 +351,6 @@ B_all <- scale(B_all, scale = FALSE)
 
 ```{r test_add_new, echo = FALSE}
 stopifnot(isTRUE(all.equal(s1, s2, check.attributes = FALSE)))
-```
-
-## High-Level Implementation Details
-MARS can be seen as a tree. Each node has a set what we will call *active* 
-observation which are non-zero and *active* covariates which are still 
-candidates to become a child node. A node can have multiple children. 
-There will be a lot on in-active observations as we go down the tree due to 
-the hinge functions. The algorithm can be as follows: 
-
-1. multiply covariates and outcomes by the square root of the weights.
-   Center and scale covariates and center outcomes. Store the means and 
-   standard deviations for later (e.g., for prediction on new data sets).
-2. compute the orders for each covariate. Store it in an object where it is 
-   fast to subset according to a subset of currenlty active observations. 
-   Compute weights at each unique value of each covariate.
-3. set the root to be a node with just a constant equal to one. Set the  
-   centered design matrix to be empty, the Gramian matrix to be empty, and 
-   the right-hand-side of the normal equation to be empty.
-4. for each node in the tree and for each active covariate in the node 
-  -  find the knot which minimizes squared error and store the squared error 
-     and the knot. Details are given below. 
-5. add two nodes at the knot found at 4. with the smallest squared error. 
-   Use two hinges functions instead of an identity fucntion and a hinge 
-   function. The former is sparse and reduces the computation cost. In each 
-   node, create objects with active covariates and observations and the 
-   value of the hinge function. Add the centered values of the two new nodes 
-   to the centered design matrix. Update the Gramian matrix, Cholesky 
-   decomposition, and right-hand-side of the normal equation.
-6. Repeat 4. if we still have not reached the request number of nodes.
-
-The main computational burden is at 4. above. This can be done as follows, 
-
-1. Get the order of the covariate for the subset of active nodes. 
-2. Using 1.-2. above, get the ordered design matrix, ordered outcome, and 
-   ordered covariate value. This requires copies but this will be presumably
-   be made up for by avoiding (many) cache misses later.
-3. Compute the knots to consder [@friedman91, pp. 26-28]. Only add a linear 
-   term if there is two unique values. Return nothing here if there is only 
-   one unique value.
-4. Augment left- and right-hand-side of normal equation with two new entries. 
-   Handle the first new index which is for the term with an identity link 
-   function.
-5. Loop over knot position and keep track of the one with the smallest 
-   squared error.
-
-```{r def_funcs, eval = FALSE}
 ```
 
 ## References

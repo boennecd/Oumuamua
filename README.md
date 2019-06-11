@@ -2,8 +2,28 @@
 Oumuamua
 ========
 
+[![Build Status on Travis](https://travis-ci.org/boennecd/Oumuamua.svg?branch=master,osx)](https://travis-ci.org/boennecd/Oumuamua)
+
+The `Oumuamua` contains a parallel implementation of the Multivariate Adaptive Regression Splines algorithm suggested in Friedman (1991). The package can be installed from Github by calling
+
+``` r
+devtools::install_github("boennecd/Oumuamua")
+```
+
+There is yet no backronym for the package. The rest of this README contains simulation examples where this package is compared with the `earth` package. The simulation examples are from Friedman (1991) and are shown to illustrate how to use the package. A discussion about implementation differences between the `earth` package and this package is given at the end. Some comments about future tasks are also listed at the end.
+
 Additive function
 -----------------
+
+We start of with a model with the additive model shown in Friedman (1991, 35). The model is
+
+![y = 0.1 \\exp 4 x\_1 + \\frac 4{1 + \\exp-20(x\_2 - 1/2)} + 3x\_3 + 2x\_4 + x\_5 + 
+   \\epsilon](https://latex.codecogs.com/svg.latex?y%20%3D%200.1%20%5Cexp%204%20x_1%20%2B%20%5Cfrac%204%7B1%20%2B%20%5Cexp-20%28x_2%20-%201%2F2%29%7D%20%2B%203x_3%20%2B%202x_4%20%2B%20x_5%20%2B%20%0A%20%20%20%5Cepsilon "y = 0.1 \exp 4 x_1 + \frac 4{1 + \exp-20(x_2 - 1/2)} + 3x_3 + 2x_4 + x_5 + 
+   \epsilon")
+
+where ![\\epsilon](https://latex.codecogs.com/svg.latex?%5Cepsilon "\epsilon") follows a standard normal distribution and the ![x\_i](https://latex.codecogs.com/svg.latex?x_i "x_i")s are uniformly distributed on ![(0,1)](https://latex.codecogs.com/svg.latex?%280%2C1%29 "(0,1)"). Moreover, we let the ![x\_i](https://latex.codecogs.com/svg.latex?x_i "x_i") be correlated and introduce a fixed number of noisy correlated variables.
+
+We start by defining two function to simulate the covariates and outcomes.
 
 ``` r
 # generates correlated uniform variables 
@@ -25,6 +45,8 @@ additiv_sim <- function(N, p){
 }
 ```
 
+Then we run the simulations.
+
 ``` r
 library(earth)
 library(Oumuamua)
@@ -39,7 +61,7 @@ p <- 10
 
 ``` r
 # returns minspan and endspan arguments. Similar to suggestion in Friedman 
-# (1991) though without ajdusting N for number of striclty positive elements 
+# (1991) though without adjusting N for number of striclty positive elements 
 # in the basis function.
 get_spans <- function(N, p, alpha = .05){
   Np <- N * p
@@ -86,6 +108,8 @@ res <- lapply(N, function(N_i){
 })
 ```
 
+We make 1000 simulation above for the different sample sizes in the vector `N`. We use `p` covariates (10) of which only 5 are associated with the outcome. We only allow for an additive model by setting `degree = 1`. The `penalty` argument is parameter in the generalized cross validation criteria mentioned in Friedman (1991, 19–22). The `lambda` parameter is the L2 penalty mentioned in Friedman (1991, 32). The mean squared errors for each sample size is shown below.
+
 ``` r
 # stats for mean square error
 names(res) <- N
@@ -106,6 +130,8 @@ lapply(res, function(x) apply(x, 1, function(z)
 #> mean           1.0826603 1.0777904
 #> standard error 0.0008677 0.0007799
 ```
+
+A comparison of computation times with both 1 and 5 threads is given below.
 
 ``` r
 library(microbenchmark)
@@ -135,6 +161,12 @@ addi_runtimes
 Interaction Example
 -------------------
 
+Next, we consider the non-additive model in Friedman (1991, 37). The true model is
+
+![y = \\sin\\pi x\_1x\_2 + 20(x\_3 - 1/2)^2 + 10x\_4 + 5x\_5 + \\epsilon](https://latex.codecogs.com/svg.latex?y%20%3D%20%5Csin%5Cpi%20x_1x_2%20%2B%2020%28x_3%20-%201%2F2%29%5E2%20%2B%2010x_4%20%2B%205x_5%20%2B%20%5Cepsilon "y = \sin\pi x_1x_2 + 20(x_3 - 1/2)^2 + 10x_4 + 5x_5 + \epsilon")
+
+We define a function to simulate the covariates and outcomes.
+
 ``` r
 interact_sim <- function(N, p){
   p <- max(5L, p)
@@ -144,6 +176,8 @@ interact_sim <- function(N, p){
   data.frame(y = y, x)
 }
 ```
+
+Then we perform the simulation.
 
 ``` r
 # functions to fit models
@@ -185,6 +219,8 @@ res <- lapply(N, function(N_i){
 })
 ```
 
+We have increased `degree` to allow for interactions. We also increase `penalty` as suggested in Friedman (1991) (though some further tuning might be needed). We set `fast.k = 0` in the `earth` call as this feature is not yet implemented in this package. The mean squared error estimate is shown below.
+
 ``` r
 # stats for mean square error
 names(res) <- N
@@ -205,6 +241,8 @@ lapply(res, function(x) apply(x, 1, function(z)
 #> mean           1.252763 1.220402
 #> standard error 0.002891 0.002427
 ```
+
+A comparison of computation times with both 1 and 5 threads is given below.
 
 ``` r
 set.seed(17039344)
@@ -229,6 +267,8 @@ inter_runtimes
 
 Interaction Example with Factor
 -------------------------------
+
+We add a dummy variable to the model from before in the last example. The code is very similar.
 
 ``` r
 factor_sim <- function(N, p){
@@ -285,6 +325,8 @@ res <- lapply(N, function(N_i){
 })
 ```
 
+The mean squared errors are given below.
+
 ``` r
 # stats for mean square error
 names(res) <- N
@@ -305,6 +347,8 @@ lapply(res, function(x) apply(x, 1, function(z)
 #> mean           1.389467 1.249641
 #> standard error 0.004928 0.003456
 ```
+
+A comparison of computation times with both 1 and 5 threads is given below.
 
 ``` r
 set.seed(17039344)
@@ -327,6 +371,19 @@ factor_runtimes
 #>  oumua (5 threads)  469.2  540.5  565.5  571.8  587.5  641.7    10
 ```
 
+Comparison with the earth Package
+---------------------------------
+
+Some of the main differences between this package and the `earth` package is
+
+-   the `earth` package has many more features!
+-   the `earth` package is single threaded (as of this writing).
+-   the `earth` includes the suggestions in Friedman (1993) to decrease the computation time. It would be nice to include these in this package. It only matters when there are many basis functions.
+-   the `earth` package does not include an L2 penalty which simplifies the computation of the generalized cross validation criterion at each knot.
+-   the `earth` package creates an orthogonal design matrix during the estimation (I think?) which allows one to skip some computations of the generalized cross validation criterion (a "full" forward and backward substitution).
+
+Some computation can be skipped if one sets `lambda` to zero (i.e., no L2 penalty). The following code blocks shows the impact.
+
 ``` r
 set.seed(17039344)
 factor_runtimes <- local({
@@ -347,3 +404,22 @@ factor_runtimes
 #>  oumua (1 thread)  1080.6 1137.0 1185.4 1194.1 1204.8 1282.4    10
 #>  oumua (5 threads)  283.1  311.4  354.6  369.3  390.7  410.8    10
 ```
+
+Settings `lambda = 0` yields one less back substitution for each knot position. Computing the orthogonal design matrix does come at a cost but it does seem worth it even with few knots. Though, I may though have misunderstood the C code in the `earth` package.
+
+A final issue that still needs to be addressed is the L2 penalty in this package. When the knot position is found then the L2 penalty is applied to the coefficients in the model
+
+![y = \\dots + \\beta\_1x\_i + \\beta\_2(x\_i - k)\_+](https://latex.codecogs.com/svg.latex?y%20%3D%20%5Cdots%20%2B%20%5Cbeta_1x_i%20%2B%20%5Cbeta_2%28x_i%20-%20k%29_%2B "y = \dots + \beta_1x_i + \beta_2(x_i - k)_+")
+
+where ![k](https://latex.codecogs.com/svg.latex?k "k") is the knot and ![\\cdots](https://latex.codecogs.com/svg.latex?%5Ccdots "\cdots") are the other terms already included in the model. However, the final L2 penalty is applied to the coefficients in the model
+
+![y = \\dots + \\beta\_1(k - x\_i)\_+ + \\beta\_2(x\_i - k)\_+](https://latex.codecogs.com/svg.latex?y%20%3D%20%5Cdots%20%2B%20%5Cbeta_1%28k%20-%20x_i%29_%2B%20%2B%20%5Cbeta_2%28x_i%20-%20k%29_%2B "y = \dots + \beta_1(k - x_i)_+ + \beta_2(x_i - k)_+")
+
+which does not yield an equivalent model. The former is faster during the knot estimation while the latter is faster later as it yields a more sparse design matrix and thus faster computation times later.
+
+References
+----------
+
+Friedman, Jerome H. 1991. “Multivariate Adaptive Regression Splines.” *Ann. Statist.* 19 (1). The Institute of Mathematical Statistics: 1–67. <https://doi.org/10.1214/aos/1176347963>.
+
+———. 1993. “Multivariate Adaptive Regression Splines.” Technical Report 110. Stanford University Department of Statistics.
