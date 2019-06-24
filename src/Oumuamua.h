@@ -80,12 +80,14 @@ struct omua_res {
  *   n_threads: number of threads to use.
  *   K: maximum number of nodes to consider in forward pass. See the fast MARS
  *   paper (Friedman, 1991).
+ *   n_save: number of iteration to save the covariate index as suggested in
+ *   the fast MARS paper (Friedman, 1991).
  */
 omua_res omua
   (const arma::mat &X, const arma::vec &Y,
    const double lambda, const unsigned endspan, const unsigned minspan,
    const unsigned degree, const unsigned nk, const double penalty,
    const unsigned trace, const double thresh, const unsigned n_threads,
-   const unsigned K);
+   const unsigned K, const unsigned n_save);
 
 #endif

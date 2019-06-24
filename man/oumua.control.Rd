@@ -7,7 +7,7 @@
 oumua.control(lambda = 1e-08, endspan = NA_integer_,
   minspan = NA_integer_, degree = 1L, nk = 20L, penalty = if
   (degree > 1) 3 else 2, trace = 0L, thresh = 0.001, n_threads = 1,
-  K = 1000L)
+  K = 1000L, n_save = 0L)
 }
 \arguments{
 \item{lambda}{L2 penalty mentioned in Friedman (1991, 32). Included both
@@ -33,7 +33,11 @@ an additional iteration.}
 \item{n_threads}{integer with number of threads to use.}
 
 \item{K}{integer greater than zero for the number of basis function to
-include before using a queue as suggested by Friedman (1993).}
+include before using a queue as suggested by Friedman (1993). 0 and 15 to
+20 may be appropriate.}
+
+\item{n_save}{integer with \eqn{h} in Friedman (1993, sec. 4). 0 to 5 may
+be appropriate.}
 }
 \description{
 Auxiliary function for \code{\link{oumua}} and \code{\link{oumua.fit}}.

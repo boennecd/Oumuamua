@@ -402,7 +402,8 @@ oumua_call <- function(sims, lambda = 1, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, lambda = lambda, nk = 100L, n_threads = n_threads, K = 20L))
+    penalty = 3, lambda = lambda, nk = 100L, n_threads = n_threads, K = 20L, 
+    n_save = 3L))
 }
 
 # run simulations
@@ -430,7 +431,7 @@ res <- lapply(10000, function(N_i){
 })
 ```
 
-The mean squared errors are given below.
+We also use the `n_save` feature described in Friedman (1993, sec. 4). The mean squared errors are given below.
 
 ``` r
 # stats for mean square error
@@ -438,8 +439,8 @@ lapply(res, function(x) apply(x, 1, function(z)
   c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
 #> [[1]]
 #>                    earth     oumua
-#> mean           1.0461485 1.0470564
-#> standard error 0.0007171 0.0007402
+#> mean           1.0461485 1.0489324
+#> standard error 0.0007171 0.0008054
 ```
 
 A comparison of computation times with both 1 and 5 threads is given below.
@@ -459,10 +460,10 @@ deep_runtimes <- local({
 ``` r
 deep_runtimes
 #> Unit: milliseconds
-#>               expr    min     lq   mean median     uq  max neval
-#>              earth 1582.6 1642.5 1706.2 1652.7 1690.1 2067    10
-#>  oumua (1 thread)  2007.2 2031.1 2512.7 2061.6 2466.5 4942    10
-#>  oumua (5 threads)  483.5  539.8  645.7  630.4  756.8  857    10
+#>               expr    min     lq   mean median     uq    max neval
+#>              earth 1567.2 1575.6 1615.5 1590.4 1614.7 1767.6    10
+#>  oumua (1 thread)  1539.8 1579.7 1594.6 1591.0 1602.4 1683.6    10
+#>  oumua (5 threads)  404.8  410.5  440.9  426.1  454.7  506.7    10
 ```
 
 Comparison with the earth Package
@@ -492,10 +493,10 @@ factor_runtimes <- local({
 ``` r
 factor_runtimes
 #> Unit: milliseconds
-#>               expr    min     lq   mean median     uq  max neval
-#>              earth 1100.2 1122.2 1153.8 1151.1 1182.6 1218    10
-#>  oumua (1 thread)   904.4  920.9  966.3  931.1  984.6 1091    10
-#>  oumua (5 threads)  275.5  306.9  329.8  316.0  364.4  396    10
+#>               expr    min     lq   mean median     uq    max neval
+#>              earth 1114.3 1119.9 1145.4 1138.1 1147.5 1232.4    10
+#>  oumua (1 thread)   897.1  906.7  929.1  933.3  943.6  961.4    10
+#>  oumua (5 threads)  236.8  237.9  243.4  240.7  245.3  265.6    10
 ```
 
 Settings `lambda = 0` yields one less back substitution for each knot position. However, this is not preferred as the implementation is not numerical stable in some cases.

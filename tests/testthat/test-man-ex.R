@@ -39,8 +39,21 @@ test_that("testing help page examples yield the same result", {
 
   fit <- oumua(y ~ ., dat, control = oumua.control(
     lambda = 1, endspan = 5L, minspan = 10L, penalty = 3, n_threads = 1L,
+    nk = 50L, degree = 3))
+  # dput(mean((true_f - predict(fit, newdata = dat))^2))
+  expect_equal(mean((true_f - predict(fit, newdata = dat))^2), 0.173499103054566)
+
+  fit <- oumua(y ~ ., dat, control = oumua.control(
+    lambda = 1, endspan = 5L, minspan = 10L, penalty = 3, n_threads = 1L,
     nk = 50L, K = 20L, degree = 3))
 
-  # dput(mean((y - predict(fit, newdata = dat))^2))
-  expect_equal(mean((y - predict(fit, newdata = dat))^2), 1.05892645208524)
+  # dput(mean((true_f - predict(fit, newdata = dat))^2))
+  expect_equal(mean((true_f - predict(fit, newdata = dat))^2), 0.190094489136486)
+
+  fit <- oumua(y ~ ., dat, control = oumua.control(
+    lambda = 1, endspan = 5L, minspan = 10L, penalty = 3, n_threads = 1L,
+    nk = 50L, K = 20L, degree = 3, n_save = 3L))
+
+  # dput(mean((true_f - predict(fit, newdata = dat))^2))
+  expect_equal(mean((true_f - predict(fit, newdata = dat))^2), 0.198533207622569)
 })

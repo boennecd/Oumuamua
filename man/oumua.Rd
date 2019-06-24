@@ -70,7 +70,7 @@ f2 <- oumua(mpg ~ cyl + disp + hp + drat + wt, mtcars,
                                     degree = 2, n_threads = 2))
 stopifnot(all.equal(coef(f1), coef(f2)))
 
-# using options suggested in Friedman (1993)
+# using options suggested by Friedman (1993)
 N <- 1000
 p <- 10
 set.seed(1)
@@ -81,14 +81,29 @@ true_f <-
 y <- true_f + rnorm(N)
 dat <- data.frame(y = y, x)
 
-fit <- oumua(y ~ ., dat, control = oumua.control(
-  lambda = 1, endspan = 5L, minspan = 10L, penalty = 3, n_threads = 1L,
-  nk = 50L, K = 20L, degree = 3))
+system.time(
+  fit <- oumua(y ~ ., dat, control = oumua.control(
+    lambda = 1, endspan = 5L, minspan = 10L, penalty = 3, n_threads = 1L,
+    nk = 50L, degree = 3)))
+mean((predict(fit, newdata = dat) - true_f)^2)
 
-mean((y - predict(fit, newdata = dat))^2)
+system.time(
+  fit <- oumua(y ~ ., dat, control = oumua.control(
+    lambda = 1, endspan = 5L, minspan = 10L, penalty = 3, n_threads = 1L,
+    nk = 50L, degree = 3, K = 20L)))
+mean((predict(fit, newdata = dat) - true_f)^2)
+
+system.time(
+  fit <- oumua(y ~ ., dat, control = oumua.control(
+    lambda = 1, endspan = 5L, minspan = 10L, penalty = 3, n_threads = 1L,
+    nk = 50L, degree = 3, K = 20L, n_save = 3L)))
+mean((predict(fit, newdata = dat) - true_f)^2)
 
 }
 \references{
 Friedman, Jerome H. \emph{Multivariate Adaptive Regression Splines}.
 The Annals of Statistics 19.1 (1991): 1-67.
+
+Friedman, Jerome H. (1993) \emph{Fast MARS}.
+Stanford University Department of Statistics, Technical Report 110.
 }

@@ -51,7 +51,7 @@ namespace {
        const sort_keys &cov_keys, const arma::uvec &active_subset,
        const arma::vec &x):
       cov_node(cov_index, knot, sign, depth, add_idx, parent),
-      active_covs(active_covs),  x(x) { }
+      active_covs(active_covs), x(x) { }
 
     /* removes a covariate from the active list e.g., if one finds that all
      * covariate values are equal for the active observations */
@@ -67,7 +67,29 @@ namespace {
   /* class to a) keep track of which covariate pairs to consider and b)
    * intermediaries in the computations related to the fast MARS paper
    * (Friedman 1993) */
-  struct task {
+  class task {
+    /* last found optimal child node covariate index */
+    unsigned long opt_cov_index_ =
+      std::numeric_limits<unsigned long>::max();
+    /* true if opt_cov_index have been set */
+    bool is_opt_cov_index_set_ = false;
+
+  public:
+    /* last iteration where opt_cov_index is updated */
+    unsigned last_updated = 0L;
+
+    unsigned long opt_cov_index() const {
+      return opt_cov_index_;
+    }
+    void set_opt_cov_index(const unsigned long opt_cov_index){
+      opt_cov_index_ = opt_cov_index;
+      is_opt_cov_index_set_ = true;
+
+    }
+    bool is_opt_cov_index_set() const {
+      return is_opt_cov_index_set_;
+    }
+
     /* active covariate indices */
     const std::vector<arma::uword> * active_covs = nullptr;
     /* pointer to parent node. Null if the task's parent is the root node. */
@@ -348,7 +370,7 @@ omua_res omua
    const double lambda, const unsigned endspan, const unsigned minspan,
    const unsigned degree, const unsigned nk, const double penalty,
    const unsigned trace, const double thresh, const unsigned n_threads,
-   const unsigned K){
+   const unsigned K, const unsigned n_save){
   if(trace > 0)
     Oout << "Starting model estimation\n";
 
@@ -491,26 +513,47 @@ omua_res omua
       futures.clear();
       {
         unsigned k = 0;
+        const bool use_last_update = it >= K;
         for(auto &t : work_queue){
           if(k++ >= K)
             break;
 
+          const bool use_saved_index =
+            use_last_update and it - t.last_updated <= n_save and
+            t.is_opt_cov_index_set();
+
           t.rss_delta = std::numeric_limits<double>::infinity();
           if(!t.parent){
-            /* root job */
-            for(auto i : *t.active_covs){
+            auto add_root_job = [&](const unsigned i){
               root_worker job { dat, i, root_parent, eq, cur_design_mat,
                                 root_childrens, t };
               futures.push_back(pool.submit(std::move(job)));
+            };
+
+            /* root job */
+            if(use_saved_index)
+              add_root_job(t.opt_cov_index());
+            else {
+              for(auto i : *t.active_covs)
+                add_root_job(i);
+              t.last_updated = it;
             }
             continue;
 
           }
 
-          for(auto i : *t.active_covs){
+          auto add_child_job = [&](const unsigned i){
             non_root_worker task {
               dat, i, t.parent->x, eq, t.parent, cur_design_mat, t };
             futures.push_back(pool.submit(std::move(task)));
+          };
+
+          if(use_saved_index)
+            add_child_job(t.opt_cov_index());
+          else {
+            for(auto i : *t.active_covs)
+              add_child_job(i);
+            t.last_updated = it;
           }
         }
       }
@@ -554,6 +597,7 @@ omua_res omua
         if(gcv_val < lowest_gcv){
           lowest_gcv = gcv_val;
           best = &r;
+          r.t.set_opt_cov_index(r.cov_index);
 
           if(trace > 2)
             Oout << "new best\n";

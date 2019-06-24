@@ -380,7 +380,8 @@ oumua_call <- function(sims, lambda = 1, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, lambda = lambda, nk = 100L, n_threads = n_threads, K = 20L))
+    penalty = 3, lambda = lambda, nk = 100L, n_threads = n_threads, K = 20L, 
+    n_save = 3L))
 }
 
 # run simulations
@@ -408,6 +409,7 @@ res <- lapply(10000, function(N_i){
 })
 ```
 
+We also use the `n_save` feature described in @Friedman93 [section 4]. 
 The mean squared errors are given below.
 
 ```{r show_deep_sim}
