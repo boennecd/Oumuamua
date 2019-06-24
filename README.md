@@ -153,9 +153,9 @@ addi_runtimes <- local({
 addi_runtimes
 #> Unit: milliseconds
 #>               expr   min    lq  mean median    uq   max neval
-#>              earth 59.21 61.16 63.87  62.24 63.73 98.59   100
-#>  oumua (1 thread)  56.17 57.43 58.70  58.66 59.56 63.82   100
-#>  oumua (5 threads) 27.29 27.89 29.63  28.30 29.76 59.04   100
+#>              earth 58.74 60.67 64.58  61.71 63.78 91.39   100
+#>  oumua (1 thread)  54.92 56.56 57.58  57.60 58.60 60.41   100
+#>  oumua (5 threads) 26.75 27.61 28.66  28.03 29.28 33.69   100
 ```
 
 Interaction Example
@@ -185,13 +185,13 @@ earth_call <- function(sims){
   spans <- get_spans(N = nrow(sims), p = p)
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
         endspan = spans["endspan"], degree = 3, penalty = 3, nk = 50, 
-        fast.k = 0)
+        fast.k = 20)
 }
 oumua_call <- function(sims, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, nk = 50L, lambda = 1, n_threads = n_threads))
+    penalty = 3, nk = 50L, lambda = 1, n_threads = n_threads, K = 20L))
 }
 
 # run simulations
@@ -219,7 +219,7 @@ res <- lapply(N, function(N_i){
 })
 ```
 
-We have increased `degree` to allow for interactions. We also increase `penalty` as suggested in Friedman (1991) (though some further tuning might be needed). We set `fast.k = 0` in the `earth` call as this feature is not yet implemented in this package. The mean squared error estimate is shown below.
+We have increased `degree` to allow for interactions. We also increase `penalty` as suggested in Friedman (1991) (though some further tuning might be needed). The `fast.k` in the `earth` and the `K` is number of basis function that must be included before a queue is used as suggested in Friedman (1993). The mean squared error estimate is shown below.
 
 ``` r
 # stats for mean square error
@@ -227,19 +227,19 @@ names(res) <- N
 lapply(res, function(x) apply(x, 1, function(z) 
   c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
 #> $`100`
-#>                  earth   oumua
-#> mean           2.46705 2.76427
-#> standard error 0.03598 0.03204
+#>                 earth   oumua
+#> mean           2.4637 2.67555
+#> standard error 0.0359 0.02785
 #> 
 #> $`200`
 #>                  earth    oumua
-#> mean           1.65700 1.485734
-#> standard error 0.01221 0.005562
+#> mean           1.65725 1.485687
+#> standard error 0.01222 0.005563
 #> 
 #> $`500`
 #>                   earth    oumua
-#> mean           1.251923 1.220402
-#> standard error 0.002866 0.002427
+#> mean           1.251923 1.220515
+#> standard error 0.002866 0.002431
 ```
 
 A comparison of computation times with both 1 and 5 threads is given below.
@@ -259,10 +259,10 @@ inter_runtimes <- local({
 ``` r
 inter_runtimes
 #> Unit: milliseconds
-#>               expr   min    lq  mean median  uq   max neval
-#>              earth 523.6 527.7 533.3  530.4 534 552.3    10
-#>  oumua (1 thread)  771.1 774.4 784.3  783.4 795 799.5    10
-#>  oumua (5 threads) 195.4 196.8 201.0  198.5 204 211.3    10
+#>               expr   min    lq  mean median    uq   max neval
+#>              earth 517.2 525.5 534.9  532.2 543.8 564.6    10
+#>  oumua (1 thread)  748.3 763.1 767.5  767.1 774.8 779.5    10
+#>  oumua (5 threads) 189.7 196.0 200.8  199.5 200.7 224.3    10
 ```
 
 Interaction Example with Factor
@@ -291,13 +291,13 @@ earth_call <- function(sims){
   spans <- get_spans(N = nrow(sims), p = p)
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
         endspan = spans["endspan"], degree = 3, penalty = 3, nk = 50, 
-        fast.k = 0, fast.beta = 0)
+        fast.k = 20)
 }
 oumua_call <- function(sims, lambda = 1, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, lambda = lambda, nk = 50L, n_threads = n_threads))
+    penalty = 3, lambda = lambda, nk = 50L, n_threads = n_threads, K = 20L))
 }
 
 # run simulations
@@ -334,18 +334,18 @@ lapply(res, function(x) apply(x, 1, function(z)
   c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
 #> $`100`
 #>                  earth   oumua
-#> mean           3.20553 4.86330
-#> standard error 0.04862 0.06104
+#> mean           3.20111 4.57737
+#> standard error 0.04855 0.05963
 #> 
 #> $`200`
 #>                  earth    oumua
-#> mean           1.73555 1.594299
-#> standard error 0.01352 0.008598
+#> mean           1.73350 1.633235
+#> standard error 0.01344 0.008144
 #> 
 #> $`500`
 #>                   earth    oumua
-#> mean           1.306565 1.249546
-#> standard error 0.003578 0.003455
+#> mean           1.306793 1.266576
+#> standard error 0.003578 0.002915
 ```
 
 A comparison of computation times with both 1 and 5 threads is given below.
@@ -365,10 +365,104 @@ factor_runtimes <- local({
 ``` r
 factor_runtimes
 #> Unit: milliseconds
+#>               expr    min     lq   mean median     uq    max neval
+#>              earth 1017.6 1068.2 1083.3 1075.4 1102.8 1181.4    10
+#>  oumua (1 thread)  1034.9 1073.3 1105.9 1101.8 1138.1 1218.0    10
+#>  oumua (5 threads)  271.2  306.2  335.9  321.6  367.1  441.1    10
+```
+
+Interaction Example (Deep-ish)
+------------------------------
+
+Below, we will check the result for the model
+
+![y = \\sin\\pi(x\_1 + x\_2 + x\_3) + \\sin\\pi(x\_2 + x\_3 + x\_4) + \\epsilon](https://latex.codecogs.com/svg.latex?y%20%3D%20%5Csin%5Cpi%28x_1%20%2B%20x_2%20%2B%20x_3%29%20%2B%20%5Csin%5Cpi%28x_2%20%2B%20x_3%20%2B%20x_4%29%20%2B%20%5Cepsilon "y = \sin\pi(x_1 + x_2 + x_3) + \sin\pi(x_2 + x_3 + x_4) + \epsilon")
+
+We only use one large sample to compare the performance for larger samples. The estimated models with have more basis functions due to the model and the larger sample. Thus, the suggestions in Friedman (1993) is more important.
+
+``` r
+interact_sim <- function(N, p){
+  p <- max(5L, p)
+  x <- get_covs(N = N, p = p)
+  y <- sin(pi * (x[, 1] + x[, 2] + x[, 3]         )) + 
+       sin(pi * (         x[, 2] + x[, 3] + x[, 4])) + 
+       rnorm(N)
+  data.frame(y = y, x)
+}
+```
+
+``` r
+earth_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
+  earth(y ~ ., data = sims, minspan = spans["minspan"], 
+        endspan = spans["endspan"], degree = 3, penalty = 3, nk = 100, 
+        fast.k = 20)
+}
+oumua_call <- function(sims, lambda = 1, n_threads = 5L){
+  spans <- get_spans(N = nrow(sims), p = p)
+  oumua(y ~ ., data = sims, control = oumua.control(
+    minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
+    penalty = 3, lambda = lambda, nk = 100L, n_threads = n_threads, K = 20L))
+}
+
+# run simulations
+set.seed(3779892)
+res <- lapply(10000, function(N_i){
+  # data used for validation
+  test_dat <- interact_sim(test_size, p)
+  
+  replicate(100, {
+    # simulate
+    sims <- interact_sim(N_i, p)
+    
+    # fit models
+    efit <- earth_call(sims)
+    ofit <- oumua_call(sims)
+    
+    # compute MSE and return
+    mse <- function(fit){
+      yhat <- predict(fit, newdata = test_dat)
+      mean((test_dat$y - yhat)^2)
+    }
+    
+    c(earth = mse(efit), oumua = mse(ofit))
+  })
+})
+```
+
+The mean squared errors are given below.
+
+``` r
+# stats for mean square error
+lapply(res, function(x) apply(x, 1, function(z) 
+  c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
+#> [[1]]
+#>                    earth     oumua
+#> mean           1.0461485 1.0470564
+#> standard error 0.0007171 0.0007402
+```
+
+A comparison of computation times with both 1 and 5 threads is given below.
+
+``` r
+set.seed(17039344)
+deep_runtimes <- local({
+  run_dat <- interact_sim(10000, 10)  
+  microbenchmark(
+    earth = earth_call(run_dat), 
+    `oumua (1 thread) ` = oumua_call(run_dat, n_threads = 1L),
+    `oumua (5 threads)` = oumua_call(run_dat, n_threads = 5L),
+    times = 10)
+})
+```
+
+``` r
+deep_runtimes
+#> Unit: milliseconds
 #>               expr    min     lq   mean median     uq  max neval
-#>              earth 1077.3 1096.6 1126.0 1115.4 1157.4 1195    10
-#>  oumua (1 thread)  1714.6 1753.8 1770.9 1756.6 1769.4 1855    10
-#>  oumua (5 threads)  418.3  422.5  427.8  425.1  432.5  446    10
+#>              earth 1582.6 1642.5 1706.2 1652.7 1690.1 2067    10
+#>  oumua (1 thread)  2007.2 2031.1 2512.7 2061.6 2466.5 4942    10
+#>  oumua (5 threads)  483.5  539.8  645.7  630.4  756.8  857    10
 ```
 
 Comparison with the earth Package
@@ -378,7 +472,6 @@ Some of the main differences between this package and the `earth` package is
 
 -   the `earth` package has many more features!
 -   the `earth` package is single threaded (as of this writing).
--   the `earth` includes the suggestions in Friedman (1993) to decrease the computation time. It would be nice to include these in this package. It only matters when there are many basis functions.
 -   the `earth` package does not include an L2 penalty which simplifies the computation of the generalized cross validation criterion at each knot.
 -   the `earth` package creates an orthogonal design matrix during the estimation which allows one (I think?) to skip some computations of the generalized cross validation criterion (a "full" forward and backward substitution). Put differently, there are no forward or backward substitutions in the C function that finds the knots in the `earth` package.
 
@@ -399,10 +492,10 @@ factor_runtimes <- local({
 ``` r
 factor_runtimes
 #> Unit: milliseconds
-#>               expr    min     lq   mean median     uq    max neval
-#>              earth 1076.4 1097.1 1127.4   1109 1148.5 1242.2    10
-#>  oumua (1 thread)  1041.6 1055.3 1078.1   1062 1068.6 1234.4    10
-#>  oumua (5 threads)  260.4  262.9  290.2    269  301.6  358.4    10
+#>               expr    min     lq   mean median     uq  max neval
+#>              earth 1100.2 1122.2 1153.8 1151.1 1182.6 1218    10
+#>  oumua (1 thread)   904.4  920.9  966.3  931.1  984.6 1091    10
+#>  oumua (5 threads)  275.5  306.9  329.8  316.0  364.4  396    10
 ```
 
 Settings `lambda = 0` yields one less back substitution for each knot position. However, this is not preferred as the implementation is not numerical stable in some cases.

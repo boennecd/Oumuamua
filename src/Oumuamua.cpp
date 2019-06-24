@@ -83,7 +83,7 @@ namespace {
 }
 
 inline double task_key(const task &x){
-  return -x.rss_delta;
+  return x.rss_delta;
 }
 
 /* overload to avoid wrong order of arguments */
@@ -469,8 +469,23 @@ omua_res omua
       })();
 
       /* sort work queue if large enough */
-      if(work_queue.size() > K)
+      if(work_queue.size() > K){
         work_queue.sort();
+
+        if(trace > 1){
+          Oout << "Using queque. Order is\n";
+          unsigned k = 0;
+          for(auto &x : work_queue){
+            if(k++ >= K)
+              break;
+            if(x.parent)
+              print_knot_info(*x.parent, out.X_scales, out.X_means, false);
+            else
+              Oout << "Root\n";
+            OPRINTF("With rss delta %14.4f\n", x.rss_delta);
+          }
+        }
+      }
 
       results.clear();
       futures.clear();
@@ -525,13 +540,23 @@ omua_res omua
 
         /* update rss_delta */
         if(r.min_se_less_var < r.t.rss_delta)
-          r.t.rss_delta = r.min_se_less_var;
+          r.t.rss_delta = r.min_se_less_var / dN;
 
         const double gcv_val =
           gcv_comp(r.min_se_less_var, r.res == hinge ? 2L : 1L).gcv;
+
+        if(trace > 2){
+          OPRINTF("Pair info (gcv, cov index): %14.4f %4d\n",
+                  gcv_val, r.cov_index);
+          print_knot_info(r, out.X_scales, out.X_means);
+        }
+
         if(gcv_val < lowest_gcv){
           lowest_gcv = gcv_val;
           best = &r;
+
+          if(trace > 2)
+            Oout << "new best\n";
         }
       }
 
@@ -639,9 +664,9 @@ omua_res omua
           parent_node.remove_active_cov(cov_index);
 
           parent_node.children.emplace_back(new extended_cov_node(
-              cov_index, knot, 0, parent_node.depth + 1, desg_indx, nullptr,
-              active_root_covs, dat.keys[cov_index], std::move(active_subset),
-              design_mat.row(desg_indx).t()));
+              cov_index, knot, 0, parent_node.depth + 1, desg_indx,
+              &parent_node, active_root_covs, dat.keys[cov_index],
+              std::move(active_subset), design_mat.row(desg_indx).t()));
           new_node = (extended_cov_node*)parent_node.children.back().get();
 
         }

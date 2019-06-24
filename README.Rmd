@@ -197,13 +197,13 @@ earth_call <- function(sims){
   spans <- get_spans(N = nrow(sims), p = p)
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
         endspan = spans["endspan"], degree = 3, penalty = 3, nk = 50, 
-        fast.k = 0)
+        fast.k = 20)
 }
 oumua_call <- function(sims, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, nk = 50L, lambda = 1, n_threads = n_threads))
+    penalty = 3, nk = 50L, lambda = 1, n_threads = n_threads, K = 20L))
 }
 
 # run simulations
@@ -233,8 +233,9 @@ res <- lapply(N, function(N_i){
 
 We have increased `degree` to allow for interactions. We also increase 
 `penalty` as suggested in @Friedman91 (though some further tuning might be 
-needed). We set `fast.k = 0` in the `earth` call as this feature is not yet
-implemented in this package. The mean squared error estimate is shown below. 
+needed). The `fast.k` in the `earth` and the `K` is number of basis function 
+that must be included before a queue is used as suggested in @Friedman93. 
+The mean squared error estimate is shown below. 
 
 ```{r show_interact_sim}
 # stats for mean square error
@@ -286,13 +287,13 @@ earth_call <- function(sims){
   spans <- get_spans(N = nrow(sims), p = p)
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
         endspan = spans["endspan"], degree = 3, penalty = 3, nk = 50, 
-        fast.k = 0, fast.beta = 0)
+        fast.k = 20)
 }
 oumua_call <- function(sims, lambda = 1, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, lambda = lambda, nk = 50L, n_threads = n_threads))
+    penalty = 3, lambda = lambda, nk = 50L, n_threads = n_threads, K = 20L))
 }
 
 # run simulations
@@ -347,7 +348,15 @@ factor_runtimes <- local({
 factor_runtimes
 ```
 
-## Interaction Example (deep)
+## Interaction Example (Deep-ish)
+
+Below, we will check the result for the model 
+
+$$y = \sin\pi(x_1 + x_2 + x_3) + \sin\pi(x_2 + x_3 + x_4) + \epsilon$$
+
+We only use one large sample to compare the performance for larger 
+samples. The estimated models with have more basis functions due to the model 
+and the larger sample. Thus, the suggestions in @Friedman93 is more important.
 
 ```{r def_deep_interact_sim}
 interact_sim <- function(N, p){
@@ -365,13 +374,13 @@ earth_call <- function(sims){
   spans <- get_spans(N = nrow(sims), p = p)
   earth(y ~ ., data = sims, minspan = spans["minspan"], 
         endspan = spans["endspan"], degree = 3, penalty = 3, nk = 100, 
-        fast.k = 0, fast.beta = 0)
+        fast.k = 20)
 }
 oumua_call <- function(sims, lambda = 1, n_threads = 5L){
   spans <- get_spans(N = nrow(sims), p = p)
   oumua(y ~ ., data = sims, control = oumua.control(
     minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
-    penalty = 3, lambda = lambda, nk = 100L, n_threads = n_threads))
+    penalty = 3, lambda = lambda, nk = 100L, n_threads = n_threads, K = 20L))
 }
 
 # run simulations
@@ -421,10 +430,9 @@ deep_runtimes <- local({
 })
 ```
 
-```{r show_dum_runtimes}
+```{r show_deep_runtimes}
 deep_runtimes
 ```
-
 
 ## Comparison with the earth Package
 
@@ -432,7 +440,6 @@ Some of the main differences between this package and the `earth` package is
 
  - the `earth` package has many more features!
  - the `earth` package is single threaded (as of this writing).
- - the `earth` includes the suggestions in @Friedman93 to decrease the computation time. It would be nice to include these in this package. It only matters when there are many basis functions.
  - the `earth` package does not include an L2 penalty which simplifies  the computation of the generalized cross validation criterion at each knot. 
  - the `earth` package creates an orthogonal design matrix during the 
    estimation which allows one (I think?) to skip some computations of the 

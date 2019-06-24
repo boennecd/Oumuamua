@@ -36,6 +36,23 @@
 #'                                     degree = 2, n_threads = 2))
 #' stopifnot(all.equal(coef(f1), coef(f2)))
 #'
+#' # using options suggested in Friedman (1993)
+#' N <- 1000
+#' p <- 10
+#' set.seed(1)
+#' x <- matrix(runif(N * (p + 5)), N)
+#' true_f <-
+#'   sin(pi * (x[, 1] + x[, 2] + x[, 3]         )) +
+#'   sin(pi * (         x[, 2] + x[, 3] + x[, 4]))
+#' y <- true_f + rnorm(N)
+#' dat <- data.frame(y = y, x)
+#'
+#' fit <- oumua(y ~ ., dat, control = oumua.control(
+#'   lambda = 1, endspan = 5L, minspan = 10L, penalty = 3, n_threads = 1L,
+#'   nk = 50L, K = 20L, degree = 3))
+#'
+#' mean((y - predict(fit, newdata = dat))^2)
+#'
 #' @return
 #' \code{oumua} returns an object of class oumua. The elements of the
 #' returned object are
