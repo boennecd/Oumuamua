@@ -6,7 +6,8 @@
 \usage{
 oumua.control(lambda = 1e-08, endspan = NA_integer_,
   minspan = NA_integer_, degree = 1L, nk = 20L, penalty = if
-  (degree > 1) 3 else 2, trace = 0L, thresh = 0.001, n_threads = 1)
+  (degree > 1) 3 else 2, trace = 0L, thresh = 0.001, n_threads = 1,
+  K = 1000L)
 }
 \arguments{
 \item{lambda}{L2 penalty mentioned in Friedman (1991, 32). Included both
@@ -30,6 +31,9 @@ the console during estimation. Zero yields no information.}
 an additional iteration.}
 
 \item{n_threads}{integer with number of threads to use.}
+
+\item{K}{integer greater than zero for the number of basis function to
+include before using a queue as suggested by Friedman (1993).}
 }
 \description{
 Auxiliary function for \code{\link{oumua}} and \code{\link{oumua.fit}}.
@@ -40,6 +44,9 @@ str(oumua.control(n_threads = 6L))
 
 }
 \references{
-Friedman, Jerome H. \emph{Multivariate Adaptive Regression Splines}.
-The Annals of Statistics 19.1 (1991): 1-67.
+Friedman, Jerome H. (1991) \emph{Multivariate Adaptive Regression Splines}.
+The Annals of Statistics 19.1: 1-67.
+
+Friedman, Jerome H. (1993) \emph{Fast MARS}.
+Stanford University Department of Statistics, Technical Report 110.
 }

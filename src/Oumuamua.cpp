@@ -9,6 +9,7 @@
 #include "miscellaneous.h"
 #include "print.h"
 #include "thread_pool.h"
+#include "sorted_queue.h"
 
 using std::size_t;
 using std::to_string;
@@ -62,6 +63,27 @@ namespace {
       return active_covs;
     }
   };
+
+  /* class to a) keep track of which covariate pairs to consider and b)
+   * intermediaries in the computations related to the fast MARS paper
+   * (Friedman 1993) */
+  struct task {
+    /* active covariate indices */
+    const std::vector<arma::uword> * active_covs = nullptr;
+    /* pointer to parent node. Null if the task's parent is the root node. */
+    extended_cov_node * parent = nullptr;
+    /* last computed delta R^2 */
+    double rss_delta = -std::numeric_limits<double>::infinity();
+
+    task(const std::vector<arma::uword> &active_covs):
+      active_covs(&active_covs) { }
+    task(extended_cov_node &parent):
+      active_covs(&parent.get_active_covs()), parent(&parent) { }
+  };
+}
+
+inline double task_key(const task &x){
+  return -x.rss_delta;
 }
 
 /* overload to avoid wrong order of arguments */
@@ -93,6 +115,10 @@ namespace {
     unsigned cov_index;
     /* pointer to parent node if the parent is not the root */
     extended_cov_node * parent = nullptr;
+    /* task associated with the pair */
+    task &t;
+
+    worker_res(task &t): t(t) { }
   };
 
   /* worker class to be used for children of the root node */
@@ -109,9 +135,11 @@ namespace {
     const arma::mat &cur_design_mat;
     /* current root nodes */
     const std::vector<std::unique_ptr<cov_node> > &root_childrens;
+    /* task associated with pair */
+    task &t;
 
     worker_res operator()() const {
-      worker_res out;
+      worker_res out(t);
       out.cov_index = cov_index;
 
       /* get sorted covariate values and find knots */
@@ -173,10 +201,12 @@ namespace {
     extended_cov_node * const parent_node;
     /* current centered design matrix */
     const arma::mat &cur_design_mat;
+    /* task associated with pair */
+    task &t;
 
   public:
     worker_res operator()() const {
-      worker_res out;
+      worker_res out(t);
       out.parent = parent_node;
       out.cov_index = cov_index;
 
@@ -245,8 +275,7 @@ namespace {
       const double
                 ss_reg = (Y_var + min_se_less_var / dN),
                 gcv_denum = 1. - get_complexity(n_new_terms) / dN;
-      return { ss_reg / (gcv_denum * gcv_denum),
-               1 - ss_reg / Y_var };
+      return { ss_reg / (gcv_denum * gcv_denum), 1 - ss_reg / Y_var };
     }
 
     double get_complexity(const unsigned n_new_terms) const {
@@ -318,7 +347,8 @@ omua_res omua
   (const arma::mat &X, const arma::vec &Y,
    const double lambda, const unsigned endspan, const unsigned minspan,
    const unsigned degree, const unsigned nk, const double penalty,
-   const unsigned trace, const double thresh, const unsigned n_threads){
+   const unsigned trace, const double thresh, const unsigned n_threads,
+   const unsigned K){
   if(trace > 0)
     Oout << "Starting model estimation\n";
 
@@ -341,6 +371,8 @@ omua_res omua
       throw_err("invalid 'penalty'");
     if(lambda < 0.)
       throw_err("invalid 'lambda'");
+    if(K < 1)
+      throw_err("invalid 'K'");
   }
 #endif
 
@@ -398,6 +430,9 @@ omua_res omua
 
   /* forward pass */
   {
+    sorted_queue<task, task_key> work_queue;
+    work_queue.emplace_back(active_root_covs);
+
     if(trace > 0)
       Oout << "Running foward pass\n";
 
@@ -433,35 +468,36 @@ omua_res omua
         return (arma::mat)design_mat.rows(0, n_terms - 1);
       })();
 
-      /* check root children */
+      /* sort work queue if large enough */
+      if(work_queue.size() > K)
+        work_queue.sort();
+
       results.clear();
       futures.clear();
-      for(auto i : active_root_covs){
-        root_worker task { dat, i, root_parent, eq, cur_design_mat,
-                           root_childrens };
-        futures.push_back(pool.submit(std::move(task)));
-      }
+      {
+        unsigned k = 0;
+        for(auto &t : work_queue){
+          if(k++ >= K)
+            break;
 
-      if(degree > 1L){
-        std::function<void(extended_cov_node * const)> add_tasks =
-          [&](extended_cov_node * const node){
-            if(node->depth + 1 > degree)
-              return;
-
-            const arma::uvec &active_covs = node->get_active_covs();
-            for(auto i : active_covs){
-              non_root_worker task {
-                dat, i, node->x, eq, node, cur_design_mat };
-              futures.push_back(pool.submit(std::move(task)));
+          t.rss_delta = std::numeric_limits<double>::infinity();
+          if(!t.parent){
+            /* root job */
+            for(auto i : *t.active_covs){
+              root_worker job { dat, i, root_parent, eq, cur_design_mat,
+                                root_childrens, t };
+              futures.push_back(pool.submit(std::move(job)));
             }
+            continue;
 
-            for(auto &x : node->children)
-              add_tasks((extended_cov_node *)x.get());
-        };
+          }
 
-        for(auto &r : root_childrens)
-          add_tasks((extended_cov_node *)r.get());
-
+          for(auto i : *t.active_covs){
+            non_root_worker task {
+              dat, i, t.parent->x, eq, t.parent, cur_design_mat, t };
+            futures.push_back(pool.submit(std::move(task)));
+          }
+        }
       }
 
       /* gather results */
@@ -487,6 +523,10 @@ omua_res omua
           }
         }
 
+        /* update rss_delta */
+        if(r.min_se_less_var < r.t.rss_delta)
+          r.t.rss_delta = r.min_se_less_var;
+
         const double gcv_val =
           gcv_comp(r.min_se_less_var, r.res == hinge ? 2L : 1L).gcv;
         if(gcv_val < lowest_gcv){
@@ -507,6 +547,7 @@ omua_res omua
           const double knot = best->knot;
 
           /* add node */
+          extended_cov_node *new_node;
           if(!best->parent){
             /* update design matrix. Wait with centering to later */
             design_mat.row(desg_indx) = dat.X.row(cov_index);
@@ -521,6 +562,7 @@ omua_res omua
               cov_index, knot, sign, 0L, desg_indx, nullptr, active_covs,
               dat.keys[cov_index], std::move(active_subset),
               design_mat.row(desg_indx).t()));
+            new_node = (extended_cov_node*)root_childrens.back().get();
 
           } else {
             extended_cov_node &parent_node = *best->parent;
@@ -539,6 +581,7 @@ omua_res omua
                 cov_index, knot, sign, parent_node.depth + 1, desg_indx,
                 &parent_node, active_covs, dat.keys[cov_index],
                 std::move(active_subset), design_mat.row(desg_indx).t()));
+            new_node = (extended_cov_node*)parent_node.children.back().get();
 
           }
 
@@ -551,6 +594,10 @@ omua_res omua
           V(desg_indx, 0) += lambda;
 
           eq.update(V, k);
+
+          /* update work queue */
+          if(new_node->depth < degree - 1)
+            work_queue.emplace_back(*new_node);
         };
 
         if(best->res == hinge)
@@ -563,6 +610,7 @@ omua_res omua
         const double knot = no_knot;
 
         /* add node */
+        extended_cov_node *new_node;
         if(!best->parent){
           /* update design matrix. Wait with centering to later */
           design_mat.row(desg_indx) = dat.X.row(cov_index);
@@ -577,6 +625,7 @@ omua_res omua
               cov_index, knot, 0, 0L, desg_indx, nullptr, active_root_covs,
               dat.keys[cov_index], std::move(active_subset),
               design_mat.row(desg_indx).t()));
+          new_node = (extended_cov_node*)root_childrens.back().get();
 
         } else {
           extended_cov_node &parent_node = *best->parent;
@@ -589,10 +638,11 @@ omua_res omua
             design_mat.row(desg_indx) != 0);
           parent_node.remove_active_cov(cov_index);
 
-          root_childrens.emplace_back(new extended_cov_node(
-              cov_index, knot, 0, 0L, desg_indx, nullptr, active_root_covs,
-              dat.keys[cov_index], std::move(active_subset),
+          parent_node.children.emplace_back(new extended_cov_node(
+              cov_index, knot, 0, parent_node.depth + 1, desg_indx, nullptr,
+              active_root_covs, dat.keys[cov_index], std::move(active_subset),
               design_mat.row(desg_indx).t()));
+          new_node = (extended_cov_node*)parent_node.children.back().get();
 
         }
 
@@ -604,6 +654,10 @@ omua_res omua
           design_mat.rows(0, desg_indx) * design_mat.row(desg_indx).t();
         V(desg_indx, 0) += lambda;
         eq.update(V, k);
+
+        /* update work queue */
+        if(new_node->depth < degree - 1)
+          work_queue.emplace_back(*new_node);
 
       } else
         throw std::runtime_error("unsupported 'res_type'");

@@ -160,7 +160,7 @@ oumua.fit <- function(x, y, offset = NULL, do_check = TRUE,
     X = x, Y = y, lambda = control$lambda, endspan = endspan,
     minspan = minspan, degree = control$degree, nk = control$nk,
     penalty = control$penalty, trace = control$trace,
-    thresh = control$thresh, n_threads = control$n_threads)
+    thresh = control$thresh, n_threads = control$n_threads, K = control$K)
   fit$drop_order <- drop(fit$drop_order)
   fit$backward_stats <- lapply(fit$backward_stats, drop)
   fit$Y <- y
@@ -268,10 +268,15 @@ print.ouNode <- function(x, ...)
 #' @param thresh required improvement in \eqn{R^2} during forward pass to take
 #' an additional iteration.
 #' @param n_threads integer with number of threads to use.
+#' @param K integer greater than zero for the number of basis function to
+#' include before using a queue as suggested by Friedman (1993).
 #'
 #' @references
-#' Friedman, Jerome H. \emph{Multivariate Adaptive Regression Splines}.
-#' The Annals of Statistics 19.1 (1991): 1-67.
+#' Friedman, Jerome H. (1991) \emph{Multivariate Adaptive Regression Splines}.
+#' The Annals of Statistics 19.1: 1-67.
+#'
+#' Friedman, Jerome H. (1993) \emph{Fast MARS}.
+#' Stanford University Department of Statistics, Technical Report 110.
 #'
 #' @examples
 #' str(oumua.control())
@@ -281,7 +286,7 @@ print.ouNode <- function(x, ...)
 oumua.control <- function(
   lambda = 1e-8, endspan = NA_integer_, minspan = NA_integer_, degree = 1L,
   nk = 20L, penalty = if(degree > 1) 3 else 2, trace = 0L, thresh = .001,
-  n_threads = 1){
+  n_threads = 1, K = 1000L){
   stopifnot(
     is.numeric(lambda), length(lambda) == 1, lambda >= 0,
     is.integer(endspan), length(endspan) == 1, endspan > 0 || is.na(endspan),
@@ -291,11 +296,12 @@ oumua.control <- function(
     is.numeric(penalty), length(penalty) == 1, penalty > 0,
     is.integer(trace), length(trace) == 1, trace > -1,
     is.numeric(thresh), length(thresh) == 1, thresh > 0,
-    is.numeric(n_threads), length(n_threads) == 1, n_threads >= 1L)
+    is.numeric(n_threads), length(n_threads) == 1, n_threads >= 1L,
+    is.integer(K), length(K) == 1, K >= 1L)
 
   list(lambda = lambda, endspan = endspan, minspan = minspan, degree = degree,
        nk = nk, penalty = penalty, trace = trace, thresh = thresh,
-       n_threads = n_threads)
+       n_threads = n_threads, K = K)
 }
 
 #' @title Predict Method for MARS Fits

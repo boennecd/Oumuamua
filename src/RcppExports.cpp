@@ -7,8 +7,8 @@
 using namespace Rcpp;
 
 // omua_to_R
-Rcpp::List omua_to_R(const arma::mat& X, const arma::vec& Y, const double lambda, const unsigned endspan, const unsigned minspan, const unsigned degree, const unsigned nk, const double penalty, const unsigned trace, const double thresh, const unsigned n_threads);
-RcppExport SEXP _Oumuamua_omua_to_R(SEXP XSEXP, SEXP YSEXP, SEXP lambdaSEXP, SEXP endspanSEXP, SEXP minspanSEXP, SEXP degreeSEXP, SEXP nkSEXP, SEXP penaltySEXP, SEXP traceSEXP, SEXP threshSEXP, SEXP n_threadsSEXP) {
+Rcpp::List omua_to_R(const arma::mat& X, const arma::vec& Y, const double lambda, const unsigned endspan, const unsigned minspan, const unsigned degree, const unsigned nk, const double penalty, const unsigned trace, const double thresh, const unsigned n_threads, const unsigned K);
+RcppExport SEXP _Oumuamua_omua_to_R(SEXP XSEXP, SEXP YSEXP, SEXP lambdaSEXP, SEXP endspanSEXP, SEXP minspanSEXP, SEXP degreeSEXP, SEXP nkSEXP, SEXP penaltySEXP, SEXP traceSEXP, SEXP threshSEXP, SEXP n_threadsSEXP, SEXP KSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -23,7 +23,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const unsigned >::type trace(traceSEXP);
     Rcpp::traits::input_parameter< const double >::type thresh(threshSEXP);
     Rcpp::traits::input_parameter< const unsigned >::type n_threads(n_threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(omua_to_R(X, Y, lambda, endspan, minspan, degree, nk, penalty, trace, thresh, n_threads));
+    Rcpp::traits::input_parameter< const unsigned >::type K(KSEXP);
+    rcpp_result_gen = Rcpp::wrap(omua_to_R(X, Y, lambda, endspan, minspan, degree, nk, penalty, trace, thresh, n_threads, K));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -47,7 +48,7 @@ END_RCPP
 RcppExport SEXP run_testthat_tests();
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_Oumuamua_omua_to_R", (DL_FUNC) &_Oumuamua_omua_to_R, 11},
+    {"_Oumuamua_omua_to_R", (DL_FUNC) &_Oumuamua_omua_to_R, 12},
     {"_Oumuamua_get_design_map_from_R", (DL_FUNC) &_Oumuamua_get_design_map_from_R, 6},
     {"run_testthat_tests", (DL_FUNC) &run_testthat_tests, 0},
     {NULL, NULL, 0}

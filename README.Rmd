@@ -347,6 +347,85 @@ factor_runtimes <- local({
 factor_runtimes
 ```
 
+## Interaction Example (deep)
+
+```{r def_deep_interact_sim}
+interact_sim <- function(N, p){
+  p <- max(5L, p)
+  x <- get_covs(N = N, p = p)
+  y <- sin(pi * (x[, 1] + x[, 2] + x[, 3]         )) + 
+       sin(pi * (         x[, 2] + x[, 3] + x[, 4])) + 
+       rnorm(N)
+  data.frame(y = y, x)
+}
+```
+
+```{r deep_sim, cache = 1}
+earth_call <- function(sims){
+  spans <- get_spans(N = nrow(sims), p = p)
+  earth(y ~ ., data = sims, minspan = spans["minspan"], 
+        endspan = spans["endspan"], degree = 3, penalty = 3, nk = 100, 
+        fast.k = 0, fast.beta = 0)
+}
+oumua_call <- function(sims, lambda = 1, n_threads = 5L){
+  spans <- get_spans(N = nrow(sims), p = p)
+  oumua(y ~ ., data = sims, control = oumua.control(
+    minspan = spans["minspan"], endspan = spans["endspan"], degree = 3L, 
+    penalty = 3, lambda = lambda, nk = 100L, n_threads = n_threads))
+}
+
+# run simulations
+set.seed(3779892)
+res <- lapply(10000, function(N_i){
+  # data used for validation
+  test_dat <- interact_sim(test_size, p)
+  
+  replicate(100, {
+    # simulate
+    sims <- interact_sim(N_i, p)
+    
+    # fit models
+    efit <- earth_call(sims)
+    ofit <- oumua_call(sims)
+    
+    # compute MSE and return
+    mse <- function(fit){
+      yhat <- predict(fit, newdata = test_dat)
+      mean((test_dat$y - yhat)^2)
+    }
+    
+    c(earth = mse(efit), oumua = mse(ofit))
+  })
+})
+```
+
+The mean squared errors are given below.
+
+```{r show_deep_sim}
+# stats for mean square error
+lapply(res, function(x) apply(x, 1, function(z) 
+  c(mean = mean(z), `standard error` = sd(z) / sqrt(length(z)))))
+```
+
+A comparison of computation times with both 1 and 5 threads is given below.
+
+```{r deep_runtimes, cache = 1, dependson = "deep_sim"}
+set.seed(17039344)
+deep_runtimes <- local({
+  run_dat <- interact_sim(10000, 10)  
+  microbenchmark(
+    earth = earth_call(run_dat), 
+    `oumua (1 thread) ` = oumua_call(run_dat, n_threads = 1L),
+    `oumua (5 threads)` = oumua_call(run_dat, n_threads = 5L),
+    times = 10)
+})
+```
+
+```{r show_dum_runtimes}
+deep_runtimes
+```
+
+
 ## Comparison with the earth Package
 
 Some of the main differences between this package and the `earth` package is 
